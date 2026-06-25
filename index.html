@@ -3,1198 +3,233 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HELA O2 • NEON BREACH</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
-
-        :root {
-            --neon-cyan: #00f3ff;
-            --neon-pink: #ff00aa;
-            --neon-orange: #ff9500;
-            --neon-green: #00ff88;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        html, body {
-            background: #04060a;
-            color: #fff;
-            font-family: 'Share Tech Mono', 'Orbitron', monospace;
-            overflow: hidden;
-            height: 100%;
-            width: 100%;
-        }
-
-        #game-canvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-            touch-action: none;
-            outline: none;
-        }
-
-        #ui-overlay {
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            z-index: 10;
-        }
-
-        .hud-panel {
-            position: absolute;
-            background: rgba(8, 11, 18, 0.82);
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            border-radius: 4px;
-            padding: 8px 14px;
-            font-size: 13px;
-            letter-spacing: 1px;
-            box-shadow: 0 0 18px rgba(0, 243, 255, 0.18);
-            backdrop-filter: blur(2px);
-            pointer-events: auto;
-        }
-
-        /* ---------- Health / Shield ---------- */
-        #health-panel { top: 20px; left: 20px; width: 240px; }
-
-        .health-label {
-            font-size: 10px;
-            color: #00f3ff;
-            margin-bottom: 4px;
-            display: flex;
-            justify-content: space-between;
-            text-transform: uppercase;
-        }
-        .health-label.shield { color: #ff9500; }
-
-        .health-bar-container {
-            height: 14px;
-            background: rgba(0,0,0,0.6);
-            border: 1px solid #2a3140;
-            position: relative;
-            margin-bottom: 8px;
-            overflow: hidden;
-        }
-        .health-bar { height: 100%; transition: width 0.2s ease-out; position: relative; }
-        #health-bar { background: linear-gradient(90deg, #ff3b3b, #ff6b6b); box-shadow: 0 0 8px #ff3b3b; }
-        #shield-bar { background: linear-gradient(90deg, #ff9500, #ffc14d); box-shadow: 0 0 8px #ff9500; }
-
-        .health-bar::after {
-            content: '';
-            position: absolute; inset: 0;
-            background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%);
-            animation: scanline 1.5s linear infinite;
-        }
-        @keyframes scanline { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
-
-        /* ---------- Brand ---------- */
-        #brand {
-            top: 118px; left: 20px;
-            font-family: 'Orbitron', sans-serif;
-            font-size: 11px; letter-spacing: 3px;
-            color: rgba(0,243,255,0.55);
-        }
-        #brand b { color: #fff; font-weight: 900; }
-        #brand .jp { color: rgba(255,149,0,0.7); letter-spacing: 1px; }
-
-        /* ---------- Ammo ---------- */
-        #ammo-panel { top: 20px; right: 196px; text-align: right; min-width: 150px; }
-        #ammo-value {
-            font-size: 30px; font-weight: 700; color: #ff9500; line-height: 1;
-            text-shadow: 0 0 12px rgba(255, 149, 0, 0.6);
-        }
-        #weapon-name { font-size: 10px; color: #00f3ff; letter-spacing: 2px; }
-
-        /* ---------- Score ---------- */
-        #score-panel {
-            top: 92px; right: 196px; text-align: right; min-width: 150px;
-            font-size: 11px; color: #00f3ff;
-        }
-        #score-value { font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 0 10px #00f3ff; }
-
-        /* ---------- Minimap ---------- */
-        #minimap-container {
-            top: 20px; right: 20px;
-            width: 164px; height: 164px;
-            background: rgba(4, 7, 13, 0.9);
-            border: 2px solid rgba(0, 243, 255, 0.4);
-            border-radius: 4px;
-            overflow: hidden;
-            box-shadow: 0 0 22px rgba(0, 243, 255, 0.15);
-            padding: 4px;
-        }
-        #minimap { width: 100%; height: 100%; image-rendering: crisp-edges; }
-
-        /* ---------- Crosshair ---------- */
-        #crosshair {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 26px; height: 26px; pointer-events: none;
-            transition: opacity 0.15s;
-        }
-        #crosshair::before, #crosshair::after {
-            content: ''; position: absolute;
-            background: rgba(0, 243, 255, 0.9);
-            box-shadow: 0 0 6px #00f3ff;
-        }
-        #crosshair::before { top: 50%; left: 0; width: 100%; height: 1px; transform: translateY(-50%); }
-        #crosshair::after  { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
-        #crosshair.hot::before, #crosshair.hot::after { background: #ff3355; box-shadow: 0 0 8px #ff3355; }
-
-        /* ---------- Status / prompts ---------- */
-        #status-text {
-            position: absolute; bottom: 86px; left: 50%; transform: translateX(-50%);
-            background: rgba(8, 11, 18, 0.7); padding: 6px 18px; border-radius: 20px;
-            font-size: 12px; color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.3);
-            opacity: 0.85; white-space: nowrap; letter-spacing: 1px;
-        }
-        #interact-prompt {
-            position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 255, 136, 0.12); padding: 8px 20px; border-radius: 4px;
-            font-size: 13px; color: #00ff88; border: 1px solid rgba(0,255,136,0.5);
-            box-shadow: 0 0 16px rgba(0,255,136,0.25); display: none; letter-spacing: 1px;
-        }
-        #interact-prompt kbd {
-            background: #00ff88; color: #04060a; padding: 1px 7px; border-radius: 3px;
-            font-weight: 700; margin-right: 4px;
-        }
-
-        #instructions {
-            position: absolute; bottom: 20px; left: 20px;
-            background: rgba(8, 11, 18, 0.75); border: 1px solid rgba(0, 243, 255, 0.2);
-            padding: 10px 14px; font-size: 11px; max-width: 280px; line-height: 1.6; color: #aab;
-        }
-        #instructions kbd {
-            background: #1a2130; padding: 1px 6px; border-radius: 3px; font-size: 10px;
-            border: 1px solid #3a4456; color: #cde;
-        }
-        #instructions strong { color: #00f3ff; letter-spacing: 2px; }
-
-        /* ---------- Loading ---------- */
-        #loading {
-            position: fixed; inset: 0; background: #04060a; z-index: 200;
-            display: flex; align-items: center; justify-content: center; flex-direction: column;
-        }
-        #loading .title {
-            font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 46px;
-            color: #fff; letter-spacing: 8px; text-shadow: 0 0 24px #00f3ff;
-        }
-        #loading .sub { color: #ff9500; letter-spacing: 6px; margin-top: 6px; font-size: 16px; }
-        #loading .bar-wrap { width: 280px; height: 6px; background: #11151f; margin-top: 28px; border-radius: 3px; overflow: hidden; }
-        #loading .bar { height: 100%; width: 0%; background: linear-gradient(90deg,#00f3ff,#ff00aa); transition: width 0.3s; }
-        #loading .hint { color: #556; margin-top: 18px; font-size: 11px; letter-spacing: 2px; }
-
-        /* ---------- Start / Game Over ---------- */
-        .screen {
-            position: absolute; inset: 0; background: rgba(4, 6, 10, 0.92);
-            display: none; align-items: center; justify-content: center; flex-direction: column;
-            z-index: 100; pointer-events: auto; text-align: center;
-        }
-        .screen h1 {
-            font-family: 'Orbitron', sans-serif; font-size: 52px; letter-spacing: 4px; margin-bottom: 8px;
-        }
-        #start-screen h1 { color: #fff; text-shadow: 0 0 22px #00f3ff; }
-        #start-screen h2 { color: #ff9500; letter-spacing: 8px; font-size: 22px; font-family: 'Orbitron'; margin-bottom: 20px; }
-        #game-over h1 { color: #ff3b3b; text-shadow: 0 0 22px #ff3b3b; }
-        .screen p { color: #889; margin-bottom: 6px; max-width: 460px; line-height: 1.6; }
-
-        .btn {
-            background: transparent; color: #00f3ff; border: 1px solid #00f3ff;
-            padding: 12px 36px; font-family: 'Share Tech Mono', monospace; font-size: 15px;
-            cursor: pointer; margin-top: 26px; transition: all 0.2s; letter-spacing: 2px;
-            pointer-events: auto;
-        }
-        .btn:hover { background: #00f3ff; color: #04060a; box-shadow: 0 0 18px #00f3ff; }
-
-        #fps {
-            position: absolute; top: 196px; right: 20px; font-size: 10px;
-            color: rgba(0,243,255,0.5); text-align: right; letter-spacing: 1px;
-        }
-    </style>
+    <title>HELA 02 • NEON BREACH — HelaO2 Studio</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-screen="splash">
     <canvas id="game-canvas"></canvas>
+    <div class="bg-grid"></div>
 
-    <!-- Loading -->
-    <div id="loading">
-        <div class="title">HELA&nbsp;02</div>
-        <div class="sub">NEON BREACH</div>
-        <div class="bar-wrap"><div class="bar" id="load-bar"></div></div>
-        <div class="hint" id="load-hint">INITIALIZING RENDER CORE…</div>
-    </div>
+    <!-- ============ SPLASH (studio presents) ============ -->
+    <section class="screen active" data-screen="splash" id="splash">
+        <div class="studio">Hela<span class="o2">O2</span> Studio</div>
+        <div class="presents">P R E S E N T S</div>
+        <div class="skip">CLICK / PRESS ANY KEY TO SKIP</div>
+    </section>
 
-    <!-- HUD -->
-    <div id="ui-overlay">
+    <!-- ============ LANDING ============ -->
+    <section class="screen" data-screen="landing" id="landing">
+        <div class="panel">
+            <span class="badge">HelaO2 (Pvt) Limited • Flagship Title</span>
+            <div class="title-xl">HELA&nbsp;02</div>
+            <div class="title-sub">NEON BREACH</div>
+            <div class="jp" style="margin-top:8px;">ヘラ02 — ネオン・ブリーチ</div>
+            <p class="tag">An atmospheric low-poly third-person shooter. Breach the neon haze, Data-Spike enemy defenses, and clear the HELA-02 sector across four escalating missions.</p>
+            <div class="btn-row">
+                <button class="btn primary" id="btn-play">▶ PLAY</button>
+                <button class="btn" id="btn-landing-random">⚄ RANDOM OP</button>
+                <button class="btn" id="btn-landing-missions">MISSIONS</button>
+                <button class="btn ghost" id="btn-landing-settings">SETTINGS</button>
+                <button class="btn ghost" id="btn-menu">MENU</button>
+            </div>
+            <div class="feature-row">
+                <div class="feature"><b>5 MISSIONS</b>Forest survival → neon city</div>
+                <div class="feature"><b>4 WEAPONS</b>Rifle · SMG · Breacher · Sidearm</div>
+                <div class="feature"><b>HUMAN · ZOMBIE · DRONE AI</b>Infected, soldiers & a war-mech</div>
+                <div class="feature"><b>BIG OPEN MAPS</b>Trees · grass · rocks · wind</div>
+            </div>
+        </div>
+        <div class="footer"><span>© HelaO2 (Pvt) Limited</span><span>BABYLON.JS · WEBGL</span><span id="ver-tag">v0.0.0</span></div>
+    </section>
+
+    <!-- ============ MAIN MENU ============ -->
+    <section class="screen" data-screen="menu" id="menu">
+        <div class="panel">
+            <h2>MAIN MENU</h2>
+            <div class="menu-item" id="m-new"><span>NEW PROTOCOL <div class="sub">Start from Mission 01</div></span><span class="arrow">▶</span></div>
+            <div class="menu-item" id="m-continue"><span>CONTINUE <div class="sub">No saved protocol</div></span><span class="arrow">▶</span></div>
+            <div class="menu-item" id="m-random"><span>RANDOM OP <div class="sub">Procedural mission & loot</div></span><span class="arrow">⚄</span></div>
+            <div class="menu-item" id="m-missions"><span>MISSION SELECT <div class="sub">Choose a deployment</div></span><span class="arrow">▶</span></div>
+            <div class="menu-item" id="m-settings"><span>SETTINGS <div class="sub">Audio · controls · graphics</div></span><span class="arrow">▶</span></div>
+            <div class="menu-item" id="m-codes"><span>SECRET CODES <div class="sub">Enter cheat protocols</div></span><span class="arrow">▶</span></div>
+            <div class="menu-item" id="m-credits"><span>CREDITS <div class="sub">HelaO2 Studios</div></span><span class="arrow">▶</span></div>
+            <div class="menu-item" id="m-landing"><span>BACK TO LANDING</span><span class="arrow">◀</span></div>
+        </div>
+    </section>
+
+    <!-- ============ MISSIONS ============ -->
+    <section class="screen" data-screen="missions" id="missions">
+        <div class="panel">
+            <div class="section-head">MISSION SELECT</div>
+            <div id="missions-list"></div>
+            <div class="btn-row"><button class="btn ghost" data-back="menu">◀ BACK</button></div>
+        </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="screen" data-screen="settings" id="settings">
+        <div class="panel">
+            <div class="section-head">SETTINGS</div>
+            <div class="set-row"><label>Master Volume</label><div><input type="range" id="set-master" min="0" max="1" step="0.05"><span class="val" id="set-master-val"></span></div></div>
+            <div class="set-row"><label>SFX Volume</label><div><input type="range" id="set-sfx" min="0" max="1" step="0.05"><span class="val" id="set-sfx-val"></span></div></div>
+            <div class="set-row"><label>Mouse Sensitivity</label><div><input type="range" id="set-sens" min="0.3" max="2.5" step="0.05"><span class="val" id="set-sens-val"></span></div></div>
+            <div class="set-row"><label>Invert Y Axis</label><input type="checkbox" id="set-invert"></div>
+            <div class="set-row"><label>Bloom</label><input type="checkbox" id="set-bloom"></div>
+            <div class="set-row"><label>Ambient Occlusion (SSAO)</label><input type="checkbox" id="set-ssao"></div>
+            <div class="set-row"><label>Film Grain</label><input type="checkbox" id="set-grain"></div>
+            <div class="set-row"><label>Screen Shake</label><input type="checkbox" id="set-shake"></div>
+            <div class="btn-row">
+                <button class="btn ghost" id="set-reset">RESET DEFAULTS</button>
+                <button class="btn ghost" id="set-wipe">ERASE SAVE</button>
+                <button class="btn" data-back="menu">◀ BACK</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ CODES ============ -->
+    <section class="screen" data-screen="codes" id="codes">
+        <div class="panel">
+            <div class="section-head">SECRET CODES</div>
+            <div class="code-box">
+                <input id="code-input" placeholder="ENTER CODE…" maxlength="16" autocomplete="off">
+                <button class="btn" id="code-submit">EXECUTE</button>
+            </div>
+            <div id="codes-active"><span class="code-none">No active cheats</span></div>
+            <div class="code-hint" style="margin-top:16px;">
+                Try: <code>GODMODE</code> · <code>FULLMETAL</code> · <code>GIVEALL</code> · <code>BIGHEAD</code> ·
+                <code>LOWGRAV</code> · <code>HASTE</code> · <code>UNLOCKALL</code> · <code>HELA02</code><br>
+                …and a classic <code>▲▲▼▼◀▶◀▶ B A</code> on any screen.
+            </div>
+            <div class="btn-row"><button class="btn ghost" data-back="menu">◀ BACK</button></div>
+        </div>
+    </section>
+
+    <!-- ============ CREDITS ============ -->
+    <section class="screen" data-screen="credits" id="credits">
+        <div class="panel">
+            <div class="title-sub" style="color:#fff;">HELA&nbsp;02 — NEON BREACH</div>
+            <div class="jp">ヘラ02 • HelaO2</div>
+            <div class="role">A FLAGSHIP TITLE BY</div><div class="name">HelaO2 Studio</div>
+            <div class="role">ENGINE</div><div class="name">BABYLON.JS · WEBGL</div>
+            <div class="role">PUBLISHED BY</div><div class="name">HelaO2 (Pvt) Limited</div>
+            <div class="role">SPECIAL THANKS</div><div class="name">THE VERDANT &amp; THE NEON HAZE</div>
+            <div class="btn-row"><button class="btn ghost" data-back="menu">◀ BACK</button></div>
+        </div>
+    </section>
+
+    <!-- ============ BRIEF ============ -->
+    <section class="screen" data-screen="brief" id="brief">
+        <div class="panel">
+            <div id="brief-no">MISSION 01</div>
+            <div id="brief-name">NEON BREACH</div>
+            <div id="brief-jp">ネオン侵入</div>
+            <p id="brief-text"></p>
+            <div id="brief-obj"></div>
+            <div class="btn-row">
+                <button class="btn primary" id="brief-start">DEPLOY ▶</button>
+                <button class="btn ghost" data-back="menu">◀ ABORT</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ PAUSE ============ -->
+    <section class="screen" data-screen="pause" id="pause">
+        <div class="panel">
+            <h1 class="title-sub" id="pause-title" style="font-size:42px;">PAUSED</h1>
+            <div class="btn-row">
+                <button class="btn primary" id="p-resume">RESUME</button>
+                <button class="btn ghost" id="p-restart">RESTART MISSION</button>
+                <button class="btn ghost" id="p-menu">QUIT TO MENU</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ COMPLETE ============ -->
+    <section class="screen" data-screen="complete" id="complete">
+        <div class="panel">
+            <h1 class="title-sub" id="c-title" style="font-size:46px;">MISSION CLEARED</h1>
+            <div class="stat-line" id="c-stats"></div>
+            <div class="btn-row">
+                <button class="btn primary" id="c-next">NEXT MISSION ▶</button>
+                <button class="btn ghost" id="c-menu">MENU</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ GAME OVER ============ -->
+    <section class="screen" data-screen="gameover" id="gameover">
+        <div class="panel">
+            <h1 class="title-sub" id="go-title" style="font-size:48px;">SYSTEM BREACH</h1>
+            <p class="small">CONNECTION TERMINATED</p>
+            <div class="stat-line" id="go-stats"></div>
+            <div class="btn-row">
+                <button class="btn primary" id="go-retry">RETRY MISSION</button>
+                <button class="btn ghost" id="go-menu">MENU</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ HUD ============ -->
+    <div id="hud" class="hidden">
         <div id="health-panel" class="hud-panel">
             <div class="health-label"><span>Integrity</span><span id="health-value">100</span></div>
             <div class="health-bar-container"><div id="health-bar" class="health-bar" style="width:100%"></div></div>
             <div class="health-label shield"><span>Shield</span><span id="shield-value">100</span></div>
             <div class="health-bar-container"><div id="shield-bar" class="health-bar" style="width:100%"></div></div>
         </div>
+        <div id="brand"><b>HELA&nbsp;02</b> NEON BREACH<br><span class="jp">ヘラ02 • HelaO2 Studio</span></div>
 
-        <div id="brand">
-            <b>HELA&nbsp;02</b> NEON BREACH<br>
-            <span class="jp">ヘラ02 テクノロジーズ</span>
-        </div>
+        <div id="objective-panel" class="hud-panel"><div id="objective-text">—</div></div>
+        <div id="wave-panel">WAVE <span id="wave-num">1</span> • <span id="wave-remaining">0</span> REMAIN</div>
 
         <div id="ammo-panel" class="hud-panel">
             <div id="weapon-name">SPIKE-RIFLE</div>
-            <div><span id="ammo-value">24</span><span style="color:#555;"> / </span><span id="ammo-reserve" style="color:#889;">98</span></div>
+            <div><span id="ammo-value">24</span><span style="color:#555;"> / </span><span id="ammo-reserve" style="color:#889;">120</span></div>
         </div>
+        <div id="weapon-slots"></div>
 
-        <div id="score-panel" class="hud-panel">
-            HOSTILES DOWN<br><span id="score-value">0</span>
-        </div>
+        <div id="score-panel" class="hud-panel">SCORE<br><span id="score-value">0</span><div id="combo"></div></div>
+        <div id="minimap-container" class="hud-panel"><canvas id="minimap" width="156" height="156"></canvas></div>
+        <div id="inventory"></div>
 
-        <div id="minimap-container" class="hud-panel">
-            <canvas id="minimap" width="156" height="156"></canvas>
+        <div id="boss-bar" class="hidden">
+            <div id="boss-name">OMEGA WAR-MECH</div>
+            <div id="boss-track"><div id="boss-fill"></div></div>
         </div>
 
         <div id="crosshair"></div>
-        <div id="status-text">HELA 02 • NEON BREACH PROTOCOL ACTIVE</div>
-        <div id="interact-prompt"><kbd>E</kbd><span id="interact-label">TAMPER WITH TERMINAL</span></div>
+        <div id="hitmarker"></div>
+        <div id="wave-announce"></div>
+        <div id="status-text">HELA 02 • NEON BREACH</div>
+        <div id="interact-prompt"><kbd>E</kbd><span id="interact-label">TAMPER</span></div>
 
         <div id="instructions">
             <strong>CONTROLS</strong><br>
-            <kbd>WASD</kbd> Move &nbsp; <kbd>MOUSE</kbd> Aim &nbsp; <kbd>SHIFT</kbd> Sprint<br>
-            <kbd>LMB</kbd> Fire &nbsp; <kbd>R</kbd> Reload &nbsp; <kbd>SPACE</kbd> Dash<br>
-            <kbd>E</kbd> Data-Spike / Tamper &nbsp; <kbd>ESC</kbd> Release
+            <kbd>WASD</kbd> Move · <kbd>MOUSE</kbd> Aim · <kbd>SHIFT</kbd> Sprint · <kbd>SPACE</kbd> Dash<br>
+            <kbd>LMB</kbd> Fire · <kbd>R</kbd> Reload · <kbd>1-4/Q</kbd> Weapon · <kbd>E</kbd> Data-Spike<br>
+            <kbd>H</kbd> Medkit · <kbd>G</kbd> Grenade · <kbd>TAB</kbd> Map · <kbd>V</kbd> View · <kbd>P</kbd> Pause · <kbd>M</kbd> Mute
         </div>
-
         <div id="fps"></div>
-
-        <div id="start-screen" class="screen" style="display:flex;">
-            <h1>HELA&nbsp;02</h1>
-            <h2>NEON BREACH</h2>
-            <p>An atmospheric low-poly breach protocol. Neutralize the hostile drone swarm, tamper with security terminals to bypass their shields, and survive the haze.</p>
-            <p style="color:#556;font-size:12px;">Built on Babylon.js — volumetric fog · bloom · SSAO · neon glow</p>
-            <button class="btn" id="start-btn">INITIATE BREACH</button>
-        </div>
-
-        <div id="game-over" class="screen">
-            <h1>SYSTEM BREACH</h1>
-            <p style="color:#889;">CONNECTION TERMINATED</p>
-            <p id="final-score" style="color:#00f3ff;font-size:18px;margin-top:10px;"></p>
-            <button class="btn" id="restart-btn">REBOOT PROTOCOL</button>
-        </div>
+        <div id="mute-ind"></div>
     </div>
 
+    <!-- big map overlay -->
+    <div id="bigmap" class="hidden"><div class="maplabel">TACTICAL MAP</div><canvas id="bigmap-canvas" width="520" height="520"></canvas></div>
+
+    <!-- toast -->
+    <div id="toast"></div>
+
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/game.js"></script>
     <script>
-    // =====================================================================
-    //  HELA 02 • NEON BREACH
-    //  Atmospheric low-poly third-person shooter — Babylon.js engine
-    //  HelaO2 Technologies
-    // =====================================================================
-    "use strict";
-
-    const C = BABYLON.Color3;
-    const V3 = BABYLON.Vector3;
-
-    // ---- Tunables -------------------------------------------------------
-    const CFG = {
-        moveSpeed: 11,
-        sprintMult: 1.7,
-        mouseSensitivity: 0.0024,
-        fireCooldown: 130,        // ms
-        magSize: 24,
-        damagePerShot: 34,
-        worldBounds: 70,
-        dashCooldown: 1400,
-        dashImpulse: 26,
-    };
-
-    // ---- State ----------------------------------------------------------
-    const game = {
-        running: false,
-        over: false,
-        health: 100,
-        shield: 100,
-        ammo: CFG.magSize,
-        reserve: 98,
-        score: 0,
-        yaw: 0,
-        pitch: 0.18,
-        keys: {},
-        pointerLocked: false,
-        lastShot: 0,
-        lastDash: 0,
-        dashVel: V3.Zero(),
-        reloading: false,
-    };
-
-    let engine, scene, camera, glow, shadowGen;
-    let player, muzzle;
-    const enemies = [];
-    const colliders = [];     // {mesh, box} for movement blocking
-    const interactables = []; // terminals
-    const particles = [];     // transient debris/sparks
-    const pickups = [];
-    let minimapCtx;
-    let domeMesh, domeShieldUp = true;
-
-    const canvas = document.getElementById('game-canvas');
-
-    // ---- Material helpers ----------------------------------------------
-    const matCache = {};
-    function flatMat(name, hex, emissiveHex, emissiveAmt) {
-        const key = name + hex + (emissiveHex||'') + (emissiveAmt||0);
-        if (matCache[key]) return matCache[key];
-        const m = new BABYLON.StandardMaterial(name, scene);
-        m.diffuseColor = C.FromHexString(hex);
-        m.specularColor = new C(0.05, 0.05, 0.08);
-        if (emissiveHex) m.emissiveColor = C.FromHexString(emissiveHex).scale(emissiveAmt || 1);
-        m.maxSimultaneousLights = 8;
-        matCache[key] = m;
-        return m;
-    }
-    function flat(mesh) { mesh.convertToFlatShadedMesh(); return mesh; }
-
-    // ---------------------------------------------------------------------
-    function buildEngine() {
-        engine = new BABYLON.Engine(canvas, true, {
-            preserveDrawingBuffer: true, stencil: true, antialias: true,
-            powerPreference: "high-performance"
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('ver-tag').textContent = 'v' + HELA.VERSION;
+            HELA.Game.boot(document.getElementById('game-canvas'));
+            HELA.UI.init();
+            HELA.UI.renderActiveCodes();
         });
-        engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio, 1.5));
-
-        scene = new BABYLON.Scene(engine);
-        scene.clearColor = new BABYLON.Color4(0.04, 0.05, 0.08, 1);
-
-        // ---- The "haze": dense exponential-squared fog ----
-        scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
-        scene.fogColor = new C(0.05, 0.07, 0.10);
-        scene.fogDensity = 0.022;
-
-        setLoad(20, "FORGING ATMOSPHERE…");
-
-        // ---- Camera (third-person, manually driven) ----
-        camera = new BABYLON.TargetCamera("cam", new V3(0, 6, -12), scene);
-        camera.fov = 1.15;
-        camera.minZ = 0.3;
-        camera.maxZ = 320;
-
-        buildLights();
-        setLoad(40, "POURING CONCRETE…");
-        buildEnvironment();
-        setLoad(60, "DEPLOYING OPERATIVE…");
-        buildPlayer();
-        spawnWave();
-        buildTerminals();
-        setLoad(80, "TUNING POST-PROCESS…");
-        buildPostFX();
-
-        minimapCtx = document.getElementById('minimap').getContext('2d');
-        bindControls();
-        window.addEventListener('resize', () => engine.resize());
-
-        setLoad(100, "READY");
-        setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 350);
-
-        engine.runRenderLoop(loop);
-    }
-
-    function buildLights() {
-        const hemi = new BABYLON.HemisphericLight("hemi", new V3(0.2, 1, 0.1), scene);
-        hemi.intensity = 0.55;
-        hemi.diffuse = C.FromHexString("#3a4a66");
-        hemi.groundColor = C.FromHexString("#0a1018");
-        hemi.specular = new C(0.1, 0.1, 0.12);
-
-        const dir = new BABYLON.DirectionalLight("dir", new V3(-0.5, -1, 0.4), scene);
-        dir.position = new V3(40, 60, -30);
-        dir.intensity = 0.6;
-        dir.diffuse = C.FromHexString("#ffd9a0");
-
-        shadowGen = new BABYLON.ShadowGenerator(1024, dir);
-        shadowGen.useBlurExponentialShadowMap = true;
-        shadowGen.blurKernel = 24;
-        shadowGen.darkness = 0.35;
-
-        // Neon accent point lights
-        addNeon("#00f3ff", new V3(-18, 9, 4), 1.4, 42);
-        addNeon("#ff00aa", new V3(12, 11, -22), 1.6, 40);
-        addNeon("#ff9500", new V3(28, 7, 15), 1.0, 32);
-        addNeon("#00ff88", new V3(-13, 5, 3), 0.9, 18);
-    }
-    function addNeon(hex, pos, intensity, range) {
-        const l = new BABYLON.PointLight("neon", pos, scene);
-        l.diffuse = C.FromHexString(hex);
-        l.intensity = intensity;
-        l.range = range;
-        l.specular = new C(0, 0, 0);
-        return l;
-    }
-
-    function buildEnvironment() {
-        // Ground
-        const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 200, height: 200, subdivisions: 2 }, scene);
-        ground.material = flatMat("ground", "#161b28");
-        ground.receiveShadows = true;
-
-        // Glowing grid (cyber tech feel)
-        const grid = BABYLON.MeshBuilder.CreateGround("grid", { width: 160, height: 160, subdivisions: 32 }, scene);
-        const gm = new BABYLON.StandardMaterial("gridMat", scene);
-        gm.wireframe = true;
-        gm.emissiveColor = C.FromHexString("#16384a");
-        gm.diffuseColor = new C(0, 0, 0);
-        gm.alpha = 0.35;
-        grid.material = gm;
-        grid.position.y = 0.04;
-        grid.isPickable = false;
-
-        // Player platform
-        addBox("platform", { w: 22, h: 3.5, d: 18 }, new V3(-4, 1.75, 6), "#2a2f3e", true);
-        for (let i = 0; i < 3; i++)
-            addBox("step", { w: 8, h: 0.9, d: 3 }, new V3(8 + i * 2.8, 0.45 + i * 0.9, 6), "#252a38", true);
-
-        // Cover blocks
-        addBox("cover1", { w: 5, h: 4, d: 6 }, new V3(14, 2, -8), "#252a38", true);
-        addBox("cover2", { w: 4, h: 5.5, d: 7.8 }, new V3(-16, 2.75, -14), "#222735", true);
-        addBox("cover3", { w: 6, h: 3, d: 3.2 }, new V3(2, 1.5, -2), "#262b3a", true);
-
-        // Pipes
-        const pipe = BABYLON.MeshBuilder.CreateCylinder("pipe", { height: 14, diameter: 1.2, tessellation: 6 }, scene);
-        pipe.material = flatMat("pipe", "#3a3f4e");
-        pipe.rotation.z = Math.PI / 2;
-        pipe.position.set(-9, 5.5, 14);
-        const pipe2 = pipe.clone("pipe2");
-        pipe2.position.set(19, 3.8, 2); pipe2.rotation.z = 0.6;
-
-        // Signature hexagonal energy dome
-        domeMesh = BABYLON.MeshBuilder.CreateIcoSphere("dome", { radius: 11, subdivisions: 2, flat: true }, scene);
-        const dm = new BABYLON.StandardMaterial("domeMat", scene);
-        dm.diffuseColor = C.FromHexString("#00ddff");
-        dm.emissiveColor = C.FromHexString("#0088aa");
-        dm.alpha = 0.22;
-        dm.wireframe = false;
-        dm.backFaceCulling = false;
-        domeMesh.material = dm;
-        domeMesh.position.set(3, 9, -34);
-        domeMesh.isPickable = false;
-        const core = BABYLON.MeshBuilder.CreateIcoSphere("domeCore", { radius: 4.5, subdivisions: 1, flat: true }, scene);
-        const cm = new BABYLON.StandardMaterial("coreMat", scene);
-        cm.emissiveColor = C.FromHexString("#00ffff"); cm.alpha = 0.5;
-        core.material = cm; core.position.copyFrom(domeMesh.position); core.isPickable = false;
-        domeMesh.metadata = { core };
-
-        // Brutalist city
-        const cityColors = ["#2c313f", "#252a36", "#1f242f", "#2a2f3a"];
-        const layout = [
-            [-32,-18,11,28,9],[-38,8,8,22,7],[-25,24,9,19,8],
-            [26,-25,10,31,8],[34,4,7,26,6],[18,20,12,17,9],
-            [-8,-40,14,36,11],[16,-44,9,26,7],[44,-10,9,30,8],[-46,-6,8,24,7]
-        ];
-        layout.forEach((b, i) => addBuilding(b[0], b[1], b[2], b[3], b[4], cityColors[i % 4]));
-
-        // Neon signs (Japanese branding to match the art)
-        neonSign(-29, 14, -17, "ヘラ02", "#ffcc00", 6);
-        neonSign(-29, 9.5, -17, "テクノロジーズ", "#00f3ff", 5);
-        neonSign(24, 13, -25, "ゲームセンター", "#ff00aa", 6);
-        neonSign(40, 11, 4, "ネオン", "#00ffcc", 4.5, Math.PI / 2);
-        floatingPanel(8, 6, 18, "#00f3ff");
-        floatingPanel(-14, 7.5, -9, "#ff00aa");
-    }
-
-    function addBox(name, s, pos, hex, collide) {
-        const m = BABYLON.MeshBuilder.CreateBox(name, { width: s.w, height: s.h, depth: s.d }, scene);
-        m.material = flatMat(name, hex);
-        m.position.copyFrom(pos);
-        m.receiveShadows = true;
-        if (shadowGen) shadowGen.addShadowCaster(m);
-        if (collide) registerCollider(m);
-        return m;
-    }
-    function addBuilding(x, z, w, h, d, hex) {
-        const b = addBox("bld", { w, h, d }, new V3(x, h / 2, z), hex, true);
-        // emissive window strip
-        if (Math.random() > 0.35) {
-            const win = BABYLON.MeshBuilder.CreateBox("win", { width: w * 0.7, height: 1.8, depth: 0.3 }, scene);
-            const wm = new BABYLON.StandardMaterial("wm", scene);
-            const c = Math.random() > 0.5 ? "#1a3a55" : "#3a1a40";
-            wm.emissiveColor = C.FromHexString(c); wm.diffuseColor = new C(0.02,0.02,0.04);
-            win.material = wm;
-            win.position.set(x, h * 0.62, z + d / 2 + 0.16);
-            win.isPickable = false;
-        }
-    }
-    function registerCollider(m) {
-        m.computeWorldMatrix(true);
-        colliders.push(m);
-    }
-
-    function dynTexPlane(name, w, h, draw, texW, texH, rotY) {
-        const dt = new BABYLON.DynamicTexture(name, { width: texW, height: texH }, scene, false);
-        draw(dt.getContext(), texW, texH);
-        dt.update();
-        dt.hasAlpha = true;
-        const plane = BABYLON.MeshBuilder.CreatePlane(name, { width: w, height: h }, scene);
-        const pm = new BABYLON.StandardMaterial(name + "m", scene);
-        pm.diffuseTexture = dt; pm.emissiveTexture = dt; pm.opacityTexture = dt;
-        pm.emissiveColor = new C(1, 1, 1);
-        pm.disableLighting = true; pm.backFaceCulling = false;
-        plane.material = pm; plane.isPickable = false;
-        if (rotY !== undefined) plane.rotation.y = rotY;
-        return { plane, dt };
-    }
-    function neonSign(x, y, z, text, hex, scale, rotY) {
-        const { plane } = dynTexPlane("sign", scale * 2.4, scale * 0.6, (ctx, w, h) => {
-            ctx.clearRect(0, 0, w, h);
-            ctx.shadowColor = hex; ctx.shadowBlur = 22;
-            ctx.fillStyle = hex; ctx.font = 'bold 70px "Segoe UI", system-ui, sans-serif';
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(text, w / 2, h / 2);
-            ctx.shadowBlur = 4; ctx.fillStyle = '#ffffff';
-            ctx.fillText(text, w / 2, h / 2);
-        }, 640, 160, rotY);
-        plane.position.set(x, y, z);
-        addNeon(hex, new V3(x, y, z + 1), 0.6, 16);
-    }
-    function floatingPanel(x, y, z, hex) {
-        const p = BABYLON.MeshBuilder.CreatePlane("panel", { width: 3.5, height: 2.2 }, scene);
-        const pm = new BABYLON.StandardMaterial("pm", scene);
-        pm.emissiveColor = C.FromHexString(hex).scale(0.7);
-        pm.diffuseColor = new C(0.03, 0.05, 0.08); pm.alpha = 0.85;
-        p.material = pm; p.position.set(x, y, z);
-        p.rotation.y = (x > 0) ? -0.6 : 0.6; p.isPickable = false;
-        addNeon(hex, new V3(x, y, z), 0.45, 12);
-    }
-
-    // ---------------------------------------------------------------------
-    function buildPlayer() {
-        player = new BABYLON.TransformNode("player", scene);
-        player.position.set(-5, 3.55, 7);
-        player.metadata = { bob: 0 };
-
-        const part = (name, s, pos, hex, em, emAmt) => {
-            const m = BABYLON.MeshBuilder.CreateBox(name, { width: s[0], height: s[1], depth: s[2] }, scene);
-            m.material = flatMat(name, hex, em, emAmt);
-            m.position.copyFrom(pos); m.parent = player;
-            if (shadowGen) shadowGen.addShadowCaster(m);
-            m.isPickable = false;
-            return m;
-        };
-        part("torso", [1.1, 1.6, 0.9], new V3(0, 0, 0), "#2f3a4a");
-        part("head", [0.85, 0.85, 0.85], new V3(0, 1.35, 0), "#252f3a");
-        part("visor", [0.72, 0.26, 0.12], new V3(0, 1.42, 0.5), "#ffcc33", "#ffaa00", 1.4);
-        const la = part("larm", [0.36, 1.05, 0.36], new V3(-0.84, 0.3, 0.1), "#2f3a4a"); la.rotation.z = 0.3;
-        const ra = part("rarm", [0.36, 1.05, 0.36], new V3(0.84, 0.3, 0.25), "#2f3a4a"); ra.rotation.x = -0.7;
-        part("gun", [0.32, 0.3, 1.7], new V3(0.84, 0.55, 0.95), "#161d27");
-        part("gunGlow", [0.1, 0.1, 1.2], new V3(0.84, 0.7, 1.0), "#0a0f15", "#00f3ff", 1.0);
-        part("lleg", [0.4, 1.0, 0.45], new V3(-0.32, -1.1, 0), "#252f3a");
-        part("rleg", [0.4, 1.0, 0.45], new V3(0.32, -1.1, 0), "#252f3a");
-        part("pack", [0.7, 0.9, 0.5], new V3(0, 0.6, -0.65), "#1b212b");
-
-        muzzle = new BABYLON.TransformNode("muzzle", scene);
-        muzzle.parent = player;
-        muzzle.position.set(0.84, 0.7, 2.0);
-    }
-
-    // ---------------------------------------------------------------------
-    function makeEnemy(pos, hp, speed) {
-        const e = new BABYLON.TransformNode("enemy", scene);
-        e.position.copyFrom(pos);
-        const eyes = [];
-        const part = (s, p, hex, em, emAmt, isEye) => {
-            const m = BABYLON.MeshBuilder.CreateBox("e", { width: s[0], height: s[1], depth: s[2] }, scene);
-            m.material = (em ? flatMat("ehot" + Math.random(), hex, em, emAmt) : flatMat("e", hex));
-            m.position.copyFrom(p); m.parent = e;
-            m.metadata = { enemy: e };
-            if (shadowGen) shadowGen.addShadowCaster(m);
-            if (isEye) eyes.push(m);
-            return m;
-        };
-        part([1.0, 1.5, 0.85], new V3(0, 0, 0), "#3a2424");
-        part([0.7, 0.65, 0.7], new V3(0, 1.25, 0), "#2a1c1c");
-        part([0.18, 0.18, 0.08], new V3(-0.22, 1.32, 0.4), "#ff2a2a", "#ff0000", 1.6, true);
-        part([0.18, 0.18, 0.08], new V3(0.22, 1.32, 0.4), "#ff2a2a", "#ff0000", 1.6, true);
-        const ant = part([0.1, 0.8, 0.1], new V3(0, 1.95, 0), "#1a1a1a");
-        part([0.18, 0.18, 0.18], new V3(0, 2.4, 0), "#ff3333", "#ff0000", 1.4);
-        const arm = part([0.25, 0.9, 0.25], new V3(0.62, 0.4, 0.1), "#2a1c1c"); arm.rotation.z = -0.6;
-        part([0.28, 0.9, 0.35], new V3(-0.32, -1.0, 0), "#2a1c1c");
-        part([0.28, 0.9, 0.35], new V3(0.32, -1.0, 0), "#2a1c1c");
-
-        e.metadata = { health: hp, maxHealth: hp, speed, lastShot: 0, eyes, compromised: false, alive: true };
-        enemies.push(e);
-        return e;
-    }
-    function spawnWave() {
-        makeEnemy(new V3(9, 3.5, -3), 100, 6.0);
-        makeEnemy(new V3(22, 3.5, -19), 80, 4.6);
-        makeEnemy(new V3(-18, 3.5, -20), 90, 5.2);
-    }
-
-    // ---------------------------------------------------------------------
-    function buildTerminals() {
-        const term = addBox("terminal", { w: 2.2, h: 2.8, d: 1.4 }, new V3(-13, 1.4, 3), "#1f252f", true);
-        const { plane, dt } = dynTexPlane("termScreen", 1.7, 1.15, drawTerminalIdle, 256, 192);
-        plane.position.set(-13, 2.35, 3.74); plane.rotation.y = 0.0;
-        addNeon("#00ff88", new V3(-13, 3.2, 3.6), 0.7, 9);
-        interactables.push({ mesh: term, screen: dt, hacked: false, label: "TAMPER WITH CORE TERMINAL" });
-
-        const term2 = addBox("terminal2", { w: 2, h: 2.6, d: 1.3 }, new V3(20, 1.3, 10), "#1f252f", true);
-        const r2 = dynTexPlane("termScreen2", 1.6, 1.05, drawTerminalIdle, 256, 192);
-        r2.plane.position.set(20, 2.2, 10.7);
-        addNeon("#00ff88", new V3(20, 3, 10.6), 0.6, 8);
-        interactables.push({ mesh: term2, screen: r2.dt, hacked: false, label: "TAMPER WITH SHIELD RELAY" });
-    }
-    function drawTerminalIdle(ctx, w, h) {
-        ctx.fillStyle = '#001508'; ctx.fillRect(0, 0, w, h);
-        ctx.fillStyle = '#00ff88'; ctx.font = '20px monospace';
-        ctx.fillText('> HELA-02 CORE', 12, 34);
-        ctx.fillText('> STATUS: ARMED', 12, 64);
-        ctx.fillText('> THREAT LV: 4', 12, 94);
-        ctx.fillText('> [E] DATA-SPIKE', 12, 140);
-        ctx.fillStyle = '#00ff8855'; ctx.fillRect(12, 160, (w-24) * (0.4 + Math.random()*0.5), 8);
-    }
-    function drawTerminalHacked(ctx, w, h) {
-        ctx.fillStyle = '#001508'; ctx.fillRect(0, 0, w, h);
-        ctx.fillStyle = '#00ffcc'; ctx.font = 'bold 20px monospace';
-        ctx.fillText('> SPIKE SUCCESS', 12, 40);
-        ctx.fillText('> SHIELD: DOWN', 12, 74);
-        ctx.fillText('> SYSTEMS', 12, 108);
-        ctx.fillText('  COMPROMISED', 12, 134);
-        ctx.fillStyle = '#00ffcc'; ctx.fillRect(12, 156, w-24, 8);
-    }
-
-    function tamper(item) {
-        if (item.hacked) return;
-        item.hacked = true;
-        item.screen.getContext().clearRect(0,0,256,192);
-        drawTerminalHacked(item.screen.getContext(), 256, 192);
-        item.screen.update();
-        item.mesh.material.emissiveColor = C.FromHexString("#00ffcc").scale(0.4);
-
-        // Drop the energy dome shield + compromise nearest hostile
-        if (domeShieldUp) {
-            domeShieldUp = false;
-            domeMesh.material.alpha = 0.06;
-            if (domeMesh.metadata.core) domeMesh.metadata.core.material.alpha = 0.04;
-            status("DATA-SPIKE DEPLOYED — ENVIRONMENTAL SHIELD BYPASSED", 3600);
-        } else {
-            status("RELAY TAMPERED — HOSTILE DEFENSES WEAKENED", 3000);
-        }
-
-        // Compromise the nearest living enemy
-        let target = null, best = 1e9;
-        for (const e of enemies) {
-            if (!e.metadata.alive) continue;
-            const d = V3.Distance(e.position, item.mesh.position);
-            if (d < best) { best = d; target = e; }
-        }
-        if (target) {
-            target.metadata.health = Math.max(20, target.metadata.health - 60);
-            target.metadata.compromised = true;
-            target.metadata.speed *= 0.55;
-            target.metadata.eyes.forEach(eye => {
-                eye.material.diffuseColor = C.FromHexString("#00ffff");
-                eye.material.emissiveColor = C.FromHexString("#00aaff");
-            });
-            flashEnemy(target);
-        }
-        // Reward ammo
-        spawnAmmoPickup(item.mesh.position.x + 2, 1.4, item.mesh.position.z + 2);
-    }
-
-    function spawnAmmoPickup(x, y, z) {
-        const box = BABYLON.MeshBuilder.CreateBox("ammoPk", { size: 1.1 }, scene);
-        box.material = flatMat("ammoPk", "#0f2418", "#00ff66", 0.7);
-        box.position.set(x, y, z); box.isPickable = false;
-        box.metadata = { phase: Math.random() * 6.28 };
-        pickups.push(box);
-    }
-
-    // ---------------------------------------------------------------------
-    function buildPostFX() {
-        glow = new BABYLON.GlowLayer("glow", scene, { mainTextureSamples: 2 });
-        glow.intensity = 0.9;
-
-        const pipeline = new BABYLON.DefaultRenderingPipeline("default", true, scene, [camera]);
-        pipeline.bloomEnabled = true;
-        pipeline.bloomThreshold = 0.55;
-        pipeline.bloomWeight = 0.65;
-        pipeline.bloomKernel = 64;
-        pipeline.bloomScale = 0.6;
-
-        pipeline.chromaticAberrationEnabled = true;
-        pipeline.chromaticAberration.aberrationAmount = 9;
-        pipeline.chromaticAberration.radialIntensity = 0.6;
-
-        pipeline.grainEnabled = true;
-        pipeline.grain.intensity = 9;
-        pipeline.grain.animated = true;
-
-        pipeline.imageProcessingEnabled = true;
-        pipeline.imageProcessing.vignetteEnabled = true;
-        pipeline.imageProcessing.vignetteWeight = 2.4;
-        pipeline.imageProcessing.vignetteColor = new BABYLON.Color4(0, 0.02, 0.05, 1);
-        pipeline.imageProcessing.contrast = 1.25;
-        pipeline.imageProcessing.exposure = 1.05;
-        pipeline.imageProcessing.toneMappingEnabled = true;
-
-        // SSAO for low-poly weight (guarded — skip on weak GPUs)
-        try {
-            if (BABYLON.SSAO2RenderingPipeline.IsSupported) {
-                const ssao = new BABYLON.SSAO2RenderingPipeline("ssao", scene, 0.75);
-                ssao.totalStrength = 1.1;
-                ssao.radius = 1.6;
-                ssao.base = 0.3;
-                scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline("ssao", camera);
-            }
-        } catch (e) { /* SSAO optional */ }
-    }
-
-    // ---------------------------------------------------------------------
-    function bindControls() {
-        canvas.addEventListener('click', () => {
-            if (game.running && !game.over && !game.pointerLocked) canvas.requestPointerLock();
-        });
-        document.addEventListener('pointerlockchange', () => {
-            game.pointerLocked = (document.pointerLockElement === canvas);
-        });
-        document.addEventListener('mousemove', (e) => {
-            if (!game.pointerLocked || game.over) return;
-            game.yaw += e.movementX * CFG.mouseSensitivity;
-            game.pitch -= e.movementY * CFG.mouseSensitivity;
-            game.pitch = Math.max(-0.6, Math.min(0.9, game.pitch));
-        });
-        document.addEventListener('keydown', (e) => {
-            if (game.over) return;
-            const k = e.key.toLowerCase();
-            game.keys[k] = true;
-            if (k === 'r') reload();
-            if (k === 'e') tryInteract();
-            if (k === ' ') dash();
-            if (e.key === 'Escape') document.exitPointerLock();
-        });
-        document.addEventListener('keyup', (e) => { game.keys[e.key.toLowerCase()] = false; });
-        canvas.addEventListener('mousedown', (e) => {
-            if (e.button === 0 && game.pointerLocked && !game.over) shoot();
-        });
-        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-        document.getElementById('start-btn').addEventListener('click', startGame);
-        document.getElementById('restart-btn').addEventListener('click', () => location.reload());
-    }
-
-    function startGame() {
-        document.getElementById('start-screen').style.display = 'none';
-        game.running = true;
-        canvas.requestPointerLock();
-        setTimeout(() => status("DATA-SPIKE PROTOCOL ENABLED — NEUTRALIZE HOSTILES", 4200), 600);
-    }
-
-    // ---- Combat ---------------------------------------------------------
-    function reload() {
-        if (game.ammo === CFG.magSize || game.reserve <= 0 || game.reloading) return;
-        game.reloading = true;
-        status("RELOADING…", 700);
-        setTimeout(() => {
-            const need = CFG.magSize - game.ammo;
-            const take = Math.min(need, game.reserve);
-            game.ammo += take; game.reserve -= take;
-            game.reloading = false; updateHUD();
-        }, 650);
-    }
-
-    function dash() {
-        const now = performance.now();
-        if (now - game.lastDash < CFG.dashCooldown) return;
-        game.lastDash = now;
-        const fwd = forwardVec();
-        game.dashVel = fwd.scale(CFG.dashImpulse);
-        status("DASH", 500);
-    }
-
-    function shoot() {
-        const now = performance.now();
-        if (now - game.lastShot < CFG.fireCooldown || game.ammo <= 0 || game.reloading) {
-            if (game.ammo <= 0) reload();
-            return;
-        }
-        game.lastShot = now;
-        game.ammo--; updateHUD();
-
-        const origin = muzzle.getAbsolutePosition();
-        const dir = aimVec();
-
-        // Muzzle flash
-        flash(origin, "#ffcc66", 3.2, 80);
-
-        const ray = new BABYLON.Ray(origin, dir, 120);
-        const hit = scene.pickWithRay(ray, (m) =>
-            m.isPickable && m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive);
-
-        let endPoint;
-        if (hit && hit.hit) {
-            endPoint = hit.pickedPoint;
-            damageEnemy(hit.pickedMesh.metadata.enemy, CFG.damagePerShot, endPoint);
-        } else {
-            // hit world or sky
-            const worldHit = scene.pickWithRay(ray, (m) => m.isPickable);
-            endPoint = (worldHit && worldHit.hit) ? worldHit.pickedPoint : origin.add(dir.scale(80));
-            impact(endPoint);
-        }
-        tracer(origin, endPoint);
-    }
-
-    function damageEnemy(e, dmg, point) {
-        if (!e.metadata.alive) return;
-        e.metadata.health -= dmg;
-        flashEnemy(e);
-        impact(point);
-        if (e.metadata.health <= 0) destroyEnemy(e);
-    }
-
-    function flashEnemy(e) {
-        e.metadata.eyes.forEach(eye => {
-            const orig = eye.material.emissiveColor.clone();
-            eye.material.emissiveColor = new C(1, 1, 1);
-            setTimeout(() => { if (e.metadata.alive || e.metadata.compromised) eye.material.emissiveColor = orig; }, 110);
-        });
-    }
-
-    function destroyEnemy(e) {
-        e.metadata.alive = false;
-        const pos = e.position.clone();
-        for (let i = 0; i < 16; i++) {
-            const d = BABYLON.MeshBuilder.CreateBox("debris", { size: 0.22 + Math.random() * 0.18 }, scene);
-            d.material = flatMat("debris", Math.random() > 0.5 ? "#442222" : "#333333");
-            d.position.copyFrom(pos);
-            d.isPickable = false;
-            particles.push({ mesh: d, vel: new V3((Math.random()-0.5)*18, Math.random()*14+4, (Math.random()-0.5)*18), life: 900, born: performance.now() });
-        }
-        flash(pos, "#ff5522", 4, 200);
-        e.dispose();
-        const idx = enemies.indexOf(e); if (idx >= 0) enemies.splice(idx, 1);
-        game.score++; updateHUD();
-        status("HOSTILE NEUTRALIZED", 1500);
-        if (enemies.length === 0) {
-            setTimeout(() => status("ALL HOSTILES NEUTRALIZED — BREACH COMPLETE", 6000), 500);
-        }
-    }
-
-    function takeDamage(amt) {
-        if (game.over) return;
-        if (game.shield > 0) {
-            game.shield = Math.max(0, game.shield - amt);
-            if (game.shield === 0) status("SHIELD DEPLETED", 1600);
-        } else {
-            game.health = Math.max(0, game.health - amt);
-        }
-        updateHUD();
-        // red flash
-        const fx = document.createElement('div');
-        fx.style.cssText = 'position:fixed;inset:0;background:rgba(255,40,40,0.22);pointer-events:none;z-index:50;';
-        document.body.appendChild(fx);
-        setTimeout(() => fx.remove(), 90);
-        if (game.health <= 0) endGame();
-    }
-
-    // ---- FX -------------------------------------------------------------
-    function flash(pos, hex, intensity, ms) {
-        const l = new BABYLON.PointLight("fl", pos.clone(), scene);
-        l.diffuse = C.FromHexString(hex); l.intensity = intensity; l.range = 10; l.specular = new C(0,0,0);
-        setTimeout(() => l.dispose(), ms);
-    }
-    function tracer(a, b) {
-        const line = BABYLON.MeshBuilder.CreateLines("tracer", { points: [a, b] }, scene);
-        line.color = C.FromHexString("#00f3ff");
-        line.isPickable = false;
-        setTimeout(() => line.dispose(), 60);
-    }
-    function impact(pos) {
-        for (let i = 0; i < 6; i++) {
-            const s = BABYLON.MeshBuilder.CreateBox("spark", { size: 0.12 }, scene);
-            s.material = flatMat("spark", "#0a0a0a", "#ffcc66", 1.2);
-            s.position.copyFrom(pos); s.isPickable = false;
-            particles.push({ mesh: s, vel: new V3((Math.random()-0.5)*14, Math.random()*10+3, (Math.random()-0.5)*14), life: 450, born: performance.now() });
-        }
-        flash(pos, "#ffaa44", 1.4, 120);
-    }
-
-    // ---- Aim / movement vectors ----------------------------------------
-    function forwardVec() {
-        return new V3(Math.sin(game.yaw), 0, Math.cos(game.yaw)).normalize();
-    }
-    function rightVec() {
-        return new V3(Math.cos(game.yaw), 0, -Math.sin(game.yaw)).normalize();
-    }
-    function aimVec() {
-        const cp = Math.cos(game.pitch);
-        return new V3(Math.sin(game.yaw) * cp, Math.sin(game.pitch), Math.cos(game.yaw) * cp).normalize();
-    }
-
-    function tryInteract() {
-        let closest = null, best = 6.5;
-        for (const it of interactables) {
-            if (it.hacked) continue;
-            const d = V3.Distance(player.position, it.mesh.position);
-            if (d < best) { best = d; closest = it; }
-        }
-        if (closest) tamper(closest);
-        else status("NO TERMINAL IN RANGE", 1400);
-    }
-
-    // ---- Per-frame updates ---------------------------------------------
-    function updatePlayer(dt) {
-        if (!game.running) return;
-        const fwd = forwardVec(), right = rightVec();
-        let mx = 0, mz = 0;
-        if (game.keys['w']) mz += 1;
-        if (game.keys['s']) mz -= 1;
-        if (game.keys['d']) mx += 1;
-        if (game.keys['a']) mx -= 1;
-
-        let speed = CFG.moveSpeed * (game.keys['shift'] ? CFG.sprintMult : 1);
-        let move = V3.Zero();
-        if (mx || mz) {
-            move = fwd.scale(mz).add(right.scale(mx));
-            move.y = 0; move.normalize().scaleInPlace(speed * dt);
-        }
-        // dash velocity decays
-        if (game.dashVel.lengthSquared() > 0.01) {
-            move.addInPlace(game.dashVel.scale(dt));
-            game.dashVel.scaleInPlace(Math.pow(0.0001, dt));
-            if (game.dashVel.length() < 0.5) game.dashVel = V3.Zero();
-        }
-
-        if (move.lengthSquared() > 0) tryMove(move);
-
-        // keep on platform height + bob
-        player.position.y = 3.55;
-        if (mx || mz) {
-            player.metadata.bob += dt * 9;
-            player.position.y += Math.sin(player.metadata.bob) * 0.05;
-        }
-        player.rotation.y = game.yaw;
-        // tilt gun with pitch
-        const gun = player.getChildMeshes().find(m => m.name === 'gun');
-        if (gun) gun.rotation.x = -game.pitch * 0.5;
-
-        // bounds
-        const b = CFG.worldBounds;
-        player.position.x = Math.max(-b, Math.min(b, player.position.x));
-        player.position.z = Math.max(-b, Math.min(b, player.position.z));
-
-        updateCamera();
-    }
-
-    function tryMove(move) {
-        const test = (axis) => {
-            const np = player.position.clone();
-            if (axis === 'x') np.x += move.x;
-            else if (axis === 'z') np.z += move.z;
-            else { np.x += move.x; np.z += move.z; }
-            const pBox = new BABYLON.BoundingBox(
-                new V3(np.x - 0.7, 0.5, np.z - 0.7),
-                new V3(np.x + 0.7, 4.0, np.z + 0.7));
-            for (const c of colliders) {
-                c.computeWorldMatrix(false);
-                const cb = c.getBoundingInfo().boundingBox;
-                if (BABYLON.BoundingBox.Intersects(pBox, cb)) return false;
-            }
-            return true;
-        };
-        if (test('both')) { player.position.x += move.x; player.position.z += move.z; }
-        else { if (test('x')) player.position.x += move.x; if (test('z')) player.position.z += move.z; }
-    }
-
-    function updateCamera() {
-        const dist = 12, height = 5.2;
-        const cp = Math.cos(game.pitch);
-        const back = new V3(-Math.sin(game.yaw) * cp, Math.sin(game.pitch), -Math.cos(game.yaw) * cp);
-        const desired = player.position.add(back.scale(dist)).add(new V3(0, height, 0));
-        camera.position = V3.Lerp(camera.position, desired, 0.14);
-        camera.setTarget(player.position.add(new V3(0, 2.0, 0)));
-    }
-
-    function updateEnemies(dt) {
-        if (!game.running) return;
-        const now = performance.now();
-        for (const e of enemies) {
-            if (!e.metadata.alive) continue;
-            const to = player.position.subtract(e.position); to.y = 0;
-            const dist = to.length();
-            if (dist > 2.6) {
-                to.normalize();
-                e.position.addInPlace(to.scale(e.metadata.speed * dt));
-                e.position.y = 3.5;
-                const ang = Math.atan2(to.x, to.z);
-                e.rotation.y = ang;
-            }
-            // shoot
-            const fireRate = e.metadata.compromised ? 2600 : 1400;
-            if (dist < 40 && now - e.metadata.lastShot > fireRate) {
-                e.metadata.lastShot = now;
-                const a = e.position.add(new V3(0, 1.1, 0));
-                const b = player.position.add(new V3(0, 1.8, 0));
-                const l = BABYLON.MeshBuilder.CreateLines("etr", { points: [a, b] }, scene);
-                l.color = C.FromHexString("#ff3355"); l.isPickable = false;
-                setTimeout(() => l.dispose(), 90);
-                takeDamage((e.metadata.compromised ? 5 : 11) + Math.random() * 5);
-            }
-        }
-    }
-
-    function updateParticles() {
-        const now = performance.now();
-        const dtg = engine.getDeltaTime() / 1000;
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.mesh.position.addInPlace(p.vel.scale(dtg));
-            p.vel.y -= 24 * dtg; p.vel.scaleInPlace(0.985);
-            if (now - p.born > p.life || p.mesh.position.y < 0.2) {
-                p.mesh.dispose(); particles.splice(i, 1);
-            }
-        }
-        // pickups float + collect
-        const dt2 = dtg;
-        for (let i = pickups.length - 1; i >= 0; i--) {
-            const pk = pickups[i];
-            pk.metadata.phase += dt2 * 3;
-            pk.position.y = 1.4 + Math.sin(pk.metadata.phase) * 0.3;
-            pk.rotation.y += dt2 * 1.8;
-            if (player && V3.Distance(player.position, pk.position) < 3) {
-                game.reserve = Math.min(game.reserve + 18, 140);
-                updateHUD(); status("+18 AMMO", 900);
-                pk.dispose(); pickups.splice(i, 1);
-            }
-        }
-    }
-
-    function updateDome(t) {
-        if (domeMesh) {
-            domeMesh.rotation.y = t * 0.1;
-            if (domeMesh.metadata.core) domeMesh.metadata.core.rotation.y = -t * 0.15;
-        }
-        // fog breathing
-        scene.fogDensity = 0.022 + Math.sin(t * 0.4) * 0.0018;
-    }
-
-    // ---- Minimap --------------------------------------------------------
-    function updateMinimap() {
-        const ctx = minimapCtx; if (!ctx || !player) return;
-        const W = 156, H = 156, b = CFG.worldBounds, scale = W / (b * 2);
-        const w2m = (x, z) => ({ x: (x + b) * scale, y: (z + b) * scale });
-
-        ctx.fillStyle = 'rgba(6,10,18,0.92)'; ctx.fillRect(0, 0, W, H);
-        ctx.strokeStyle = 'rgba(0,243,255,0.13)'; ctx.lineWidth = 1;
-        for (let i = 0; i <= 6; i++) {
-            const p = (i / 6) * W;
-            ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, H); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(W, p); ctx.stroke();
-        }
-        // terminals
-        for (const it of interactables) {
-            const m = w2m(it.mesh.position.x, it.mesh.position.z);
-            ctx.fillStyle = it.hacked ? '#00ffcc' : '#00ff88';
-            ctx.fillRect(m.x - 2.5, m.y - 2.5, 5, 5);
-        }
-        // enemies
-        ctx.fillStyle = '#ff3355';
-        for (const e of enemies) {
-            if (!e.metadata.alive) continue;
-            const m = w2m(e.position.x, e.position.z);
-            ctx.fillStyle = e.metadata.compromised ? '#00ffff' : '#ff3355';
-            ctx.beginPath(); ctx.arc(m.x, m.y, 4, 0, 6.28); ctx.fill();
-        }
-        // player
-        const pm = w2m(player.position.x, player.position.z);
-        ctx.save(); ctx.translate(pm.x, pm.y); ctx.rotate(game.yaw + Math.PI);
-        ctx.fillStyle = '#00f3ff';
-        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(-5, 6); ctx.lineTo(5, 6); ctx.closePath(); ctx.fill();
-        ctx.restore();
-        ctx.strokeStyle = 'rgba(0,243,255,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(1, 1, W - 2, H - 2);
-    }
-
-    // ---- Interact prompt ------------------------------------------------
-    function updateInteractPrompt() {
-        const prompt = document.getElementById('interact-prompt');
-        if (!game.running) { prompt.style.display = 'none'; return; }
-        let near = null, best = 6.5;
-        for (const it of interactables) {
-            if (it.hacked) continue;
-            const d = V3.Distance(player.position, it.mesh.position);
-            if (d < best) { best = d; near = it; }
-        }
-        if (near) {
-            document.getElementById('interact-label').textContent = near.label;
-            prompt.style.display = 'block';
-        } else prompt.style.display = 'none';
-    }
-
-    // ---- HUD ------------------------------------------------------------
-    function updateHUD() {
-        document.getElementById('health-value').textContent = Math.floor(game.health);
-        document.getElementById('health-bar').style.width = game.health + '%';
-        document.getElementById('shield-value').textContent = Math.floor(game.shield);
-        document.getElementById('shield-bar').style.width = game.shield + '%';
-        document.getElementById('ammo-value').textContent = game.ammo;
-        document.getElementById('ammo-reserve').textContent = game.reserve;
-        document.getElementById('score-value').textContent = game.score;
-    }
-
-    let statusTimer;
-    function status(msg, ms) {
-        const el = document.getElementById('status-text');
-        el.textContent = msg; el.style.opacity = '0.95';
-        clearTimeout(statusTimer);
-        statusTimer = setTimeout(() => {
-            if (!game.over) { el.textContent = 'HELA 02 • NEON BREACH PROTOCOL ACTIVE'; el.style.opacity = '0.7'; }
-        }, ms || 2400);
-    }
-
-    function endGame() {
-        game.over = true; game.running = false;
-        document.exitPointerLock();
-        document.getElementById('final-score').textContent = 'HOSTILES NEUTRALIZED: ' + game.score;
-        document.getElementById('game-over').style.display = 'flex';
-        const el = document.getElementById('status-text');
-        el.textContent = 'CONNECTION LOST'; el.style.color = '#ff3355';
-    }
-
-    function setLoad(pct, hint) {
-        document.getElementById('load-bar').style.width = pct + '%';
-        if (hint) document.getElementById('load-hint').textContent = hint;
-    }
-
-    // ---- Main loop ------------------------------------------------------
-    let fpsCounter = 0, fpsTime = 0;
-    function loop() {
-        const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
-        const t = performance.now() / 1000;
-
-        updatePlayer(dt);
-        updateEnemies(dt);
-        updateParticles();
-        updateDome(t);
-        updateMinimap();
-        updateInteractPrompt();
-
-        // crosshair hot state when aiming at an enemy
-        if (game.running && (fpsCounter % 3 === 0)) {
-            const ray = new BABYLON.Ray(muzzle.getAbsolutePosition(), aimVec(), 120);
-            const h = scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive);
-            document.getElementById('crosshair').classList.toggle('hot', !!(h && h.hit));
-        }
-
-        scene.render();
-
-        fpsCounter++; fpsTime += engine.getDeltaTime();
-        if (fpsTime > 500) {
-            document.getElementById('fps').textContent = Math.round(engine.getFps()) + ' FPS';
-            fpsTime = 0;
-        }
-    }
-
-    // ---- Boot -----------------------------------------------------------
-    window.addEventListener('DOMContentLoaded', () => {
-        try { buildEngine(); }
-        catch (err) {
-            document.getElementById('load-hint').textContent = 'RENDER CORE FAILURE: ' + err.message;
-            console.error(err);
-        }
-    });
     </script>
 </body>
 </html>
