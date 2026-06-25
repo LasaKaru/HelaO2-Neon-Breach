@@ -284,8 +284,10 @@ window.HELA = window.HELA || {};
         rail(-2, 6, 70, 0.5, '#ff1f8a'); rail(-3.4, 6, 70, 0.18, '#ff1f8a');
         rail(8, 14, 40, 0.35, lv.accent); rail(-22, -2, 30, 0.3, '#00ffcc');
 
-        addBox('platform', { w: 22, h: 3.5, d: 18 }, new V3(-4, 1.75, 6), '#2a2f3e', true);
-        for (let i = 0; i < 3; i++) addBox('step', { w: 8, h: 0.9, d: 3 }, new V3(8 + i * 2.8, 0.45 + i * 0.9, 6), '#252a38', true);
+        // flat cracked-concrete slab at the start — decorative & walkable, NOT a wall
+        const slab = BABYLON.MeshBuilder.CreateGround('slab', { width: 28, height: 24 }, scene);
+        const sm = new BABYLON.StandardMaterial('slabM', scene); sm.diffuseColor = C.FromHexString('#3b424a'); sm.specularColor = new C(0, 0, 0);
+        slab.material = sm; slab.position.set(-4, 0.06, 6); slab.receiveShadows = true; slab.isPickable = false;
         addBox('cover1', { w: 5, h: 4, d: 6 }, new V3(14, 2, -8), '#252a38', true);
         addBox('cover2', { w: 4, h: 5.5, d: 7.8 }, new V3(-16, 2.75, -14), '#222735', true);
         addBox('cover3', { w: 6, h: 3, d: 3.2 }, new V3(2, 1.5, -2), '#262b3a', true);
@@ -646,7 +648,7 @@ window.HELA = window.HELA || {};
     // ---- player ----
     function buildPlayer() {
         player = new BABYLON.TransformNode('player', S.scene);
-        player.position.set(-5, 3.55, 7); player.metadata = { bob: 0 };
+        player.position.set(-4, 2.0, 6); player.metadata = { bob: 0 };
         const part = (name, s, pos, hex, em, emAmt) => {
             const m = BABYLON.MeshBuilder.CreateBox(name, { width: s[0], height: s[1], depth: s[2] }, S.scene);
             m.material = flatMat(name, hex, em, emAmt); m.position.copyFrom(pos); m.parent = player;
@@ -818,7 +820,7 @@ window.HELA = window.HELA || {};
         const rleg = new BABYLON.TransformNode('rleg', S.scene); rleg.parent = e; rleg.position.set(0.24 * s, -0.3 * s, 0);
         part([0.3, 1.0, 0.32], new V3(0, -0.5, 0), T.pants, null, null, lleg);
         part([0.3, 1.0, 0.32], new V3(0, -0.5, 0), T.pants, null, null, rleg);
-        e.metadata = { kind: 'zombie', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], arms: [larm, rarm], walk: Math.random() * 6, groundY: 2.3 };
+        e.metadata = { kind: 'zombie', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], arms: [larm, rarm], walk: Math.random() * 6, groundY: 2.0 };
         attachHealthBar(e, 1.4, 2.7 * s);
         if (S.codes.bighead) head.scaling.setAll(1.9);
         enemies.push(e); return e;
@@ -845,7 +847,7 @@ window.HELA = window.HELA || {};
         part([0.18, 0.18, 0.18], new V3(0, 2.4, 0), T.eye, T.eyeEm, 1.4);
         const arm = part([0.25, 0.9, 0.25], new V3(0.62, 0.4, 0.1), '#2a1c1c'); arm.rotation.z = -0.6;
         part([0.28, 0.9, 0.35], new V3(-0.32, -1.0, 0), '#2a1c1c'); part([0.28, 0.9, 0.35], new V3(0.32, -1.0, 0), '#2a1c1c');
-        e.metadata = { kind: 'drone', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 3.5 };
+        e.metadata = { kind: 'drone', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 3.0 };
         attachHealthBar(e, 1.4, 2.7 * s);
         if (S.codes.bighead) head.scaling.setAll(1.9);
         enemies.push(e); return e;
@@ -873,7 +875,7 @@ window.HELA = window.HELA || {};
         const rleg = new BABYLON.TransformNode('rleg', S.scene); rleg.parent = e; rleg.position.set(0.26 * s, -0.3 * s, 0);
         part([0.32, 1.0, 0.34], new V3(0, -0.5, 0), T.suit, null, null, lleg);
         part([0.32, 1.0, 0.34], new V3(0, -0.5, 0), T.suit, null, null, rleg);
-        e.metadata = { kind: 'human', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes: [], headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], rarm, walk: 0, groundY: 4.0 };
+        e.metadata = { kind: 'human', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes: [], headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], rarm, walk: 0, groundY: 2.0 };
         attachHealthBar(e, 1.5, 2.9 * s);
         if (S.codes.bighead) head.scaling.setAll(1.9);
         enemies.push(e); return e;
@@ -893,7 +895,7 @@ window.HELA = window.HELA || {};
         part([0.7, 0.7, 1.4], new V3(-1.6, 0.7, 0.5), '#0a0510', T.eyeEm, 0.5); // left cannon
         part([0.7, 0.7, 1.4], new V3(1.6, 0.7, 0.5), '#0a0510', T.eyeEm, 0.5);  // right cannon
         part([0.8, 1.6, 0.8], new V3(-0.7, -1.6, 0), '#150815'); part([0.8, 1.6, 0.8], new V3(0.7, -1.6, 0), '#150815'); // legs
-        e.metadata = { kind: 'boss', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 5.0 };
+        e.metadata = { kind: 'boss', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 6.5 };
         S.bossRef = e; enemies.push(e);
         $('boss-bar').classList.remove('hidden'); $('boss-name').textContent = 'OMEGA WAR-MECH';
         Audio.boss();
