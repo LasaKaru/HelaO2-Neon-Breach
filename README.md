@@ -1,6 +1,6 @@
 # HELA 02 • NEON BREACH
 
-An atmospheric **low-poly third-person shooter** that runs entirely in the browser, built on **Babylon.js** — a flagship web-tech showcase for **HelaO2 Studios / HelaO2 Technologies**.
+A **low-poly third-person shooter** that runs entirely in the browser, built on **Babylon.js** — a flagship web-tech title from **HelaO2 Studio** (**HelaO2 (Pvt) Limited**). It opens on a bright, clear **forest survival** map and escalates into the neon city.
 
 Open `index.html` in any modern browser — no build step, no server required.
 
@@ -13,21 +13,30 @@ js/game.js      → Babylon engine, worlds, weapons, AI, objectives, FX
 ```
 
 ## Front end / shell
-- **HelaO2 Studios splash** → animated **landing web page** → **main menu**
+- **HelaO2 Studio splash** → animated **landing web page** → **main menu**
 - **Main menu**: New Protocol · **Continue** (saved progress) · Mission Select · Settings · Secret Codes · Credits
 - **Mission brief** screen before each deployment; **pause**, **mission-complete** and **game-over** screens
 - **Settings** (persisted to `localStorage`): master & SFX volume, mouse sensitivity, invert-Y, and graphics toggles (bloom / SSAO / grain / screen-shake)
 - **Save / Continue**: unlocked missions, best score and completion are stored locally
 
-## Missions (4 levels, distinct objectives)
-| # | Mission | Objective |
-|---|---------|-----------|
-| 01 | NEON BREACH | Survive 3 escalating waves |
-| 02 | DATA HEIST | Data-Spike every security terminal |
-| 03 | CRIMSON GARRISON | Eliminate 22 hostiles |
-| 04 | CRIMSON SPIRE | Destroy the OMEGA war-mech (boss) |
+## Missions (5 levels, distinct objectives)
+| # | Mission | Theme | Objective |
+|---|---------|-------|-----------|
+| 01 | VERDANT | Bright forest | Survive 8 waves of the infected |
+| 02 | NEON BREACH | Neon city | Survive 3 escalating waves |
+| 03 | DATA HEIST | Neon city | Data-Spike every security terminal |
+| 04 | CRIMSON GARRISON | Neon city | Eliminate 22 hostiles |
+| 05 | CRIMSON SPIRE | Neon city | Destroy the OMEGA war-mech (boss) |
 
-Each level is its own themed world — different fog colour/density, ground tone, neon signage and enemy pool.
+Each level is its own themed world — its own sky/fog, ground, props and enemy pool.
+
+### VERDANT — the forest survival map
+A **large open playground** (big bounds, ~400 m ground) rendered **bright and clear** in daylight:
+low-poly **cone trees** with wind-swayed foliage, a dense **grass field** (thousands of GPU thin-instances),
+scattered **rocks**, **dirt roads**, drifting pollen motes, and a soft sun — with **human-like zombie**
+enemies (walkers, fast runners, heavy lurkers) that melee you. The previous "dusty/blurry" haze has been
+dialled right back across the whole game (much lighter fog, minimal chromatic aberration & grain, brighter
+exposure, FXAA) so the action reads clearly.
 
 ## Combat & systems
 - **4 weapons** with independent ammo, switchable with `1-4` / `Q`:

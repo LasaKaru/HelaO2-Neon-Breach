@@ -74,18 +74,23 @@ window.HELA = window.HELA || {};
         lastShot: 0, lastDash: 0, dashVel: null, reloading: false, shake: 0, muted: false,
         curWeapon: 'spike', weaponState: {}, unlockedWeapons: { spike: true, sidearm: true },
         codes: {}, bossRef: null, mapOpen: false, frame: 0, fpsTime: 0,
+        bounds: 70, groundY: 3.55, theme: 'neon',
     };
     HELA.Game = { currentLevelId: 1 };
 
     let engine, camera, glow, shadowGen, pipeline, ssaoPipe;
     let player, muzzle, playerHead;
     let enemies = [], colliders = [], interactables = [], particles = [], bolts = [], pickups = [];
+    let windNodes = [], motes = [];
     let domeMesh, domeShieldUp = true, minimapCtx, bigmapCtx;
     let canvas;
-    const SPAWN = [
-        new V3(28, 3.5, -20), new V3(-26, 3.5, -22), new V3(34, 3.5, 8), new V3(-34, 3.5, 6),
-        new V3(10, 3.5, -34), new V3(-12, 3.5, -36), new V3(40, 3.5, -4), new V3(-40, 3.5, -2),
-    ];
+    let SPAWN = [];
+    // Spawn ring scaled to the level's play area.
+    function buildSpawnRing(bounds) {
+        const r = bounds * 0.78, pts = [];
+        for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; pts.push(new V3(Math.cos(a) * r, 3.5, Math.sin(a) * r)); }
+        return pts;
+    }
 
     // ---- helpers ----
     const $ = (id) => document.getElementById(id);
@@ -194,34 +199,49 @@ window.HELA = window.HELA || {};
     //  SCENE BUILD (themed per level)
     // =================================================================
     function buildScene() {
-        const lv = S.level;
+        const lv = S.level; S.theme = lv.theme || 'neon';
+        S.bounds = lv.bigMap ? 112 : 70;
+        S.groundY = (S.theme === 'forest') ? 1.85 : 3.55;
+        SPAWN = buildSpawnRing(S.bounds);
+        windNodes = []; motes = [];
+
         const scene = new BABYLON.Scene(engine); S.scene = scene;
-        scene.clearColor = new BABYLON.Color4(...hexToRgb01(lv.fog), 1);
+        scene.clearColor = new BABYLON.Color4(...hexToRgb01(lv.sky || lv.fog), 1);
         scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
         scene.fogColor = C.FromHexString(lv.fog);
         scene.fogDensity = lv.fogDensity;
 
         camera = new BABYLON.TargetCamera('cam', new V3(0, 6, -12), scene);
-        camera.fov = 1.15; camera.minZ = 0.3; camera.maxZ = 320;
+        camera.fov = 1.1; camera.minZ = 0.3; camera.maxZ = 600;
 
-        // lights
-        const hemi = new BABYLON.HemisphericLight('hemi', new V3(0.2, 1, 0.1), scene);
-        hemi.intensity = 0.55; hemi.diffuse = C.FromHexString('#3a4a66'); hemi.groundColor = C.FromHexString('#0a1018');
-        const dir = new BABYLON.DirectionalLight('dir', new V3(-0.5, -1, 0.4), scene);
-        dir.position = new V3(40, 60, -30); dir.intensity = 0.6; dir.diffuse = C.FromHexString('#ffd9a0');
-        shadowGen = new BABYLON.ShadowGenerator(1024, dir); shadowGen.useBlurExponentialShadowMap = true; shadowGen.blurKernel = 24; shadowGen.darkness = 0.35;
-        addNeon(lv.accent, new V3(-18, 9, 4), 1.4, 42);
-        addNeon('#ff00aa', new V3(12, 11, -22), 1.5, 40);
-        addNeon('#ff9500', new V3(28, 7, 15), 1.0, 32);
-
+        buildLights(lv);
         buildEnvironment(lv);
         buildPlayer();
-        const termCount = (lv.objective === 'hack') ? 3 : (lv.objective === 'boss' ? 0 : 2);
+        const termCount = (lv.theme === 'forest' || lv.objective === 'boss') ? 0 : (lv.objective === 'hack' ? 3 : 2);
         buildTerminals(termCount);
         S.terminalsTotal = interactables.length;
-        buildPostFX();
+        buildPostFX(S.theme);
 
         minimapCtx = $('minimap').getContext('2d');
+    }
+    function buildLights(lv) {
+        const scene = S.scene;
+        if (lv.theme === 'forest') {
+            const hemi = new BABYLON.HemisphericLight('hemi', new V3(0.1, 1, 0.05), scene);
+            hemi.intensity = 0.95; hemi.diffuse = C.FromHexString('#eaf2ff'); hemi.groundColor = C.FromHexString('#4a5a30'); hemi.specular = new C(0.1, 0.1, 0.1);
+            const sun = new BABYLON.DirectionalLight('sun', new V3(-0.55, -0.85, 0.4), scene);
+            sun.position = new V3(80, 110, -70); sun.intensity = 1.35; sun.diffuse = C.FromHexString('#fff2d6');
+            shadowGen = new BABYLON.ShadowGenerator(1536, sun); shadowGen.useBlurExponentialShadowMap = true; shadowGen.blurKernel = 28; shadowGen.darkness = 0.55;
+        } else {
+            const hemi = new BABYLON.HemisphericLight('hemi', new V3(0.2, 1, 0.1), scene);
+            hemi.intensity = 0.6; hemi.diffuse = C.FromHexString('#3a4a66'); hemi.groundColor = C.FromHexString('#0a1018');
+            const dir = new BABYLON.DirectionalLight('dir', new V3(-0.5, -1, 0.4), scene);
+            dir.position = new V3(40, 60, -30); dir.intensity = 0.6; dir.diffuse = C.FromHexString('#ffd9a0');
+            shadowGen = new BABYLON.ShadowGenerator(1024, dir); shadowGen.useBlurExponentialShadowMap = true; shadowGen.blurKernel = 24; shadowGen.darkness = 0.35;
+            addNeon(lv.accent, new V3(-18, 9, 4), 1.4, 42);
+            addNeon('#ff00aa', new V3(12, 11, -22), 1.5, 40);
+            addNeon('#ff9500', new V3(28, 7, 15), 1.0, 32);
+        }
     }
     function hexToRgb01(h) { const c = C.FromHexString(h); return [c.r, c.g, c.b]; }
     function addNeon(hex, pos, intensity, range) {
@@ -230,6 +250,10 @@ window.HELA = window.HELA || {};
     }
 
     function buildEnvironment(lv) {
+        if (lv.theme === 'forest') return buildForest(lv);
+        return buildNeonEnv(lv);
+    }
+    function buildNeonEnv(lv) {
         const scene = S.scene;
         const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 200, height: 200, subdivisions: 2 }, scene);
         ground.material = flatMat('ground', lv.ground); ground.receiveShadows = true;
@@ -271,6 +295,112 @@ window.HELA = window.HELA || {};
         if (signs[2]) neonSign(24, 13, -25, signs[2][0], signs[2][1], 6);
         floatingPanel(8, 6, 18, lv.accent); floatingPanel(-14, 7.5, -9, '#ff00aa');
     }
+
+    // ---------------- FOREST (bright, clear, big open map) ----------------
+    function buildForest(lv) {
+        const scene = S.scene, B = S.bounds;
+        domeMesh = null;  // forest has no energy dome
+        // large rolling ground
+        const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: B * 4, height: B * 4, subdivisions: 1 }, scene);
+        const gm = new BABYLON.StandardMaterial('groundM', scene); gm.diffuseColor = C.FromHexString(lv.ground); gm.specularColor = new C(0, 0, 0);
+        ground.material = gm; ground.receiveShadows = true; ground.position.y = 0;
+
+        // distant tree-line ring (gives the "deep forest" horizon, cheap)
+        for (let i = 0; i < 60; i++) {
+            const a = (i / 60) * Math.PI * 2, r = B * 1.9 + Math.random() * 30;
+            makeTree(Math.cos(a) * r, Math.sin(a) * r, 1.4 + Math.random() * 0.8, true);
+        }
+        // playable-area trees (colliders), avoid the centre spawn pad
+        let placed = 0, guard = 0;
+        while (placed < 46 && guard < 400) {
+            guard++;
+            const x = (Math.random() - 0.5) * B * 1.8, z = (Math.random() - 0.5) * B * 1.8;
+            if (Math.hypot(x + 4, z - 6) < 16) continue;     // clearing around player start
+            if (Math.abs(x) < 5) continue;                    // keep the road clear
+            makeTree(x, z, 0.85 + Math.random() * 0.9, false); placed++;
+        }
+        // rocks (cover + colliders)
+        for (let i = 0; i < 22; i++) {
+            const x = (Math.random() - 0.5) * B * 1.6, z = (Math.random() - 0.5) * B * 1.6;
+            if (Math.hypot(x + 4, z - 6) < 12) continue;
+            makeRock(x, z, 0.8 + Math.random() * 1.8);
+        }
+        // dirt road down the middle + a crossing
+        road(0, 0, 9, B * 3.4, 0);
+        road(0, -10, 9, B * 2.0, Math.PI / 2);
+        // grass field (thin instances — one draw call)
+        makeGrassField(B);
+        // wind motes / drifting pollen
+        for (let i = 0; i < 46; i++) makeMote(B);
+        // soft sun disc on the horizon
+        const sunDisc = BABYLON.MeshBuilder.CreatePlane('sun', { size: 60 }, scene);
+        const sm = new BABYLON.StandardMaterial('sunM', scene); sm.emissiveColor = C.FromHexString('#fff4cf'); sm.disableLighting = true; sm.backFaceCulling = false;
+        sunDisc.material = sm; sunDisc.position.set(70, 48, -150); sunDisc.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL; sunDisc.isPickable = false;
+    }
+    function makeTree(x, z, scale, distant) {
+        const scene = S.scene;
+        const h = (6 + Math.random() * 5) * scale;
+        const trunk = BABYLON.MeshBuilder.CreateCylinder('trunk', { height: h, diameterTop: 0.5 * scale, diameterBottom: 0.95 * scale, tessellation: 6 }, scene);
+        const tm = new BABYLON.StandardMaterial('trunkM', scene); tm.diffuseColor = C.FromHexString(Math.random() > 0.5 ? '#6e4a2b' : '#5c3d24'); tm.specularColor = new C(0, 0, 0);
+        trunk.material = tm; trunk.position.set(x, h / 2, z);
+        // foliage: stacked low-poly cones on a swayable pivot
+        const pivot = new BABYLON.TransformNode('foliage', scene); pivot.position.set(x, h, z);
+        const greens = ['#3f6b2e', '#4f7e34', '#5d8f3a', '#375f28'];
+        const tiers = 3 + (Math.random() > 0.5 ? 1 : 0);
+        for (let t = 0; t < tiers; t++) {
+            const cone = BABYLON.MeshBuilder.CreateCylinder('leaf', { height: 3.2 * scale, diameterTop: 0, diameterBottom: (5.2 - t * 1.0) * scale, tessellation: 7 }, scene);
+            const lm = new BABYLON.StandardMaterial('leafM', scene); lm.diffuseColor = C.FromHexString(greens[t % greens.length]); lm.specularColor = new C(0, 0, 0);
+            cone.material = lm; cone.parent = pivot; cone.position.y = t * 2.2 * scale - 1;
+            if (!distant && shadowGen) shadowGen.addShadowCaster(cone);
+        }
+        if (!distant && shadowGen) shadowGen.addShadowCaster(trunk);
+        if (!distant) { trunk.computeWorldMatrix(true); colliders.push(trunk); }
+        windNodes.push({ node: pivot, phase: Math.random() * 6.28, amp: 0.02 + Math.random() * 0.04, speed: 0.7 + Math.random() * 0.6 });
+    }
+    function makeRock(x, z, s) {
+        const rock = BABYLON.MeshBuilder.CreateIcoSphere('rock', { radius: s, subdivisions: 1, flat: true }, S.scene);
+        const m = new BABYLON.StandardMaterial('rockM', S.scene); m.diffuseColor = C.FromHexString(Math.random() > 0.5 ? '#8a8f96' : '#71767e'); m.specularColor = new C(0.05, 0.05, 0.05);
+        rock.material = m; rock.position.set(x, s * 0.55, z); rock.scaling.y = 0.7; rock.rotation.y = Math.random() * 3;
+        rock.receiveShadows = true; if (shadowGen) shadowGen.addShadowCaster(rock);
+        rock.computeWorldMatrix(true); colliders.push(rock);
+    }
+    function road(x, z, w, len, rotY) {
+        const r = BABYLON.MeshBuilder.CreateGround('road', { width: w, height: len }, S.scene);
+        const m = new BABYLON.StandardMaterial('roadM', S.scene); m.diffuseColor = C.FromHexString('#6b5a3c'); m.specularColor = new C(0, 0, 0);
+        r.material = m; r.position.set(x, 0.02, z); if (rotY) r.rotation.y = rotY; r.isPickable = false; r.receiveShadows = true;
+    }
+    function makeGrassField(B) {
+        const scene = S.scene;
+        // one tufted blade mesh, scattered as thin instances (single draw call)
+        const blade = BABYLON.MeshBuilder.CreateCylinder('grass', { height: 1.1, diameterTop: 0, diameterBottom: 0.5, tessellation: 3 }, scene);
+        const gm = new BABYLON.StandardMaterial('grassM', scene); gm.diffuseColor = C.FromHexString('#6f9a3e'); gm.specularColor = new C(0, 0, 0); gm.backFaceCulling = false;
+        blade.material = gm; blade.isPickable = false; blade.alwaysSelectAsActiveMesh = true;
+        const count = 4200, m = BABYLON.Matrix;
+        const mats = new Float32Array(count * 16);
+        for (let i = 0; i < count; i++) {
+            const x = (Math.random() - 0.5) * B * 2.0, z = (Math.random() - 0.5) * B * 2.0;
+            const s = 0.6 + Math.random() * 1.1, ry = Math.random() * 3.14;
+            const mat = m.Scaling(s, s, s).multiply(m.RotationY(ry)).multiply(m.Translation(x, 0.55 * s, z));
+            mat.copyToArray(mats, i * 16);
+        }
+        blade.thinInstanceSetBuffer('matrix', mats, 16);
+    }
+    function makeMote(B) {
+        const p = BABYLON.MeshBuilder.CreatePlane('mote', { size: 0.16 }, S.scene);
+        const m = new BABYLON.StandardMaterial('moteM', S.scene); m.emissiveColor = C.FromHexString('#fff6d8'); m.disableLighting = true; m.alpha = 0.5; m.backFaceCulling = false;
+        p.material = m; p.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL; p.isPickable = false;
+        p.position.set((Math.random() - 0.5) * B * 1.6, 1 + Math.random() * 6, (Math.random() - 0.5) * B * 1.6);
+        motes.push({ mesh: p, phase: Math.random() * 6.28, sp: 0.4 + Math.random() * 0.8 });
+    }
+    function updateWind(t) {
+        for (const w of windNodes) w.node.rotation.z = Math.sin(t * w.speed + w.phase) * w.amp;
+        const drift = Math.sin(t * 0.3) * 0.01 + 0.012;
+        for (const mo of motes) {
+            mo.mesh.position.x += drift; mo.mesh.position.y += Math.sin(t * mo.sp + mo.phase) * 0.004;
+            if (mo.mesh.position.x > S.bounds * 0.9) mo.mesh.position.x = -S.bounds * 0.9;
+        }
+    }
+
     function rail(x, z, len, w, hex) {
         const r = BABYLON.MeshBuilder.CreateBox('rail', { width: w, height: 0.08, depth: len }, S.scene);
         const m = new BABYLON.StandardMaterial('railm', S.scene); m.emissiveColor = C.FromHexString(hex); m.diffuseColor = new C(0, 0, 0); m.disableLighting = true;
@@ -389,17 +519,25 @@ window.HELA = window.HELA || {};
     }
 
     // ---- post fx ----
-    function buildPostFX() {
-        glow = new BABYLON.GlowLayer('glow', S.scene, { mainTextureSamples: 2 }); glow.intensity = 0.9;
+    function buildPostFX(theme) {
+        const forest = theme === 'forest';
+        glow = new BABYLON.GlowLayer('glow', S.scene, { mainTextureSamples: 2 }); glow.intensity = forest ? 0.5 : 0.85;
         pipeline = new BABYLON.DefaultRenderingPipeline('default', true, S.scene, [camera]);
-        pipeline.bloomEnabled = HELA.Settings.get('bloom'); pipeline.bloomThreshold = 0.55; pipeline.bloomWeight = 0.65; pipeline.bloomKernel = 64; pipeline.bloomScale = 0.6;
-        pipeline.chromaticAberrationEnabled = true; pipeline.chromaticAberration.aberrationAmount = 9; pipeline.chromaticAberration.radialIntensity = 0.6;
-        pipeline.grainEnabled = HELA.Settings.get('grain'); pipeline.grain.intensity = 9; pipeline.grain.animated = true;
-        pipeline.imageProcessingEnabled = true; pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 2.4;
-        pipeline.imageProcessing.vignetteColor = new BABYLON.Color4(0, 0.02, 0.05, 1); pipeline.imageProcessing.contrast = 1.25; pipeline.imageProcessing.exposure = 1.05; pipeline.imageProcessing.toneMappingEnabled = true;
+        // Bloom: subtle on the bright forest, punchier on neon
+        pipeline.bloomEnabled = HELA.Settings.get('bloom'); pipeline.bloomThreshold = forest ? 0.82 : 0.6; pipeline.bloomWeight = forest ? 0.35 : 0.55; pipeline.bloomKernel = 48; pipeline.bloomScale = 0.5;
+        // Clarity: kill the heavy blur/dust. CA & grain are tiny now (forest = none).
+        pipeline.chromaticAberrationEnabled = !forest; pipeline.chromaticAberration.aberrationAmount = 2.5; pipeline.chromaticAberration.radialIntensity = 0.4;
+        pipeline.grainEnabled = HELA.Settings.get('grain') && !forest; pipeline.grain.intensity = 2.5; pipeline.grain.animated = true;
+        pipeline.imageProcessingEnabled = true;
+        pipeline.imageProcessing.vignetteEnabled = !forest; pipeline.imageProcessing.vignetteWeight = 1.2;
+        pipeline.imageProcessing.vignetteColor = new BABYLON.Color4(0, 0.02, 0.05, 1);
+        pipeline.imageProcessing.contrast = forest ? 1.08 : 1.18; pipeline.imageProcessing.exposure = forest ? 1.22 : 1.12;
+        pipeline.imageProcessing.toneMappingEnabled = true;
+        pipeline.fxaaEnabled = true;
+        pipeline.samples = 4;
         try {
             if (BABYLON.SSAO2RenderingPipeline.IsSupported && HELA.Settings.get('ssao')) {
-                ssaoPipe = new BABYLON.SSAO2RenderingPipeline('ssao', S.scene, 0.75); ssaoPipe.totalStrength = 1.1; ssaoPipe.radius = 1.6; ssaoPipe.base = 0.3;
+                ssaoPipe = new BABYLON.SSAO2RenderingPipeline('ssao', S.scene, 0.8); ssaoPipe.totalStrength = forest ? 0.7 : 1.0; ssaoPipe.radius = 1.4; ssaoPipe.base = 0.35;
                 S.scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline('ssao', camera);
             }
         } catch (e) {}
@@ -411,8 +549,37 @@ window.HELA = window.HELA || {};
     function makeEnemy(typeKey, pos) {
         const T = HELA.ENEMY_TYPES[typeKey];
         if (T.kind === 'human') return makeHuman(typeKey, pos, T);
+        if (T.kind === 'zombie') return makeZombie(typeKey, pos, T);
         if (T.kind === 'boss') return makeBoss(typeKey, pos, T);
         return makeDrone(typeKey, pos, T);
+    }
+    // Human-like infected: arms reaching forward, glowing eyes, melee, walk cycle.
+    function makeZombie(typeKey, pos, T) {
+        const e = new BABYLON.TransformNode('enemy', S.scene); e.position.copyFrom(pos); const s = T.size, eyes = [];
+        const part = (dim, p, hex, em, emAmt, parent, isEye) => {
+            const m = BABYLON.MeshBuilder.CreateBox('e', { width: dim[0] * s, height: dim[1] * s, depth: dim[2] * s }, S.scene);
+            m.material = (em ? flatMat('zhot' + typeKey + Math.random(), hex, em, emAmt) : flatMat('z' + typeKey + hex, hex));
+            m.position.copyFrom(p.scale(s)); m.parent = parent || e; m.metadata = { enemy: e }; if (shadowGen) shadowGen.addShadowCaster(m); if (isEye) eyes.push(m); return m;
+        };
+        part([0.9, 1.25, 0.5], new V3(0, 0.35, 0), T.shirt);             // torso
+        part([0.55, 0.45, 0.45], new V3(0, 1.05, 0), T.skin);           // neck/upper
+        const head = part([0.6, 0.62, 0.6], new V3(0, 1.55, 0), T.skin);
+        part([0.14, 0.12, 0.08], new V3(-0.16, 1.58, 0.3), T.eye, T.eyeEm, 1.6, null, true);
+        part([0.14, 0.12, 0.08], new V3(0.16, 1.58, 0.3), T.eye, T.eyeEm, 1.6, null, true);
+        // arms reaching forward
+        const larm = new BABYLON.TransformNode('larm', S.scene); larm.parent = e; larm.position.set(-0.56 * s, 0.85 * s, 0); larm.rotation.x = -1.2;
+        const rarm = new BABYLON.TransformNode('rarm', S.scene); rarm.parent = e; rarm.position.set(0.56 * s, 0.85 * s, 0); rarm.rotation.x = -1.2;
+        part([0.26, 0.95, 0.26], new V3(0, -0.4, 0), T.skin, null, null, larm);
+        part([0.26, 0.95, 0.26], new V3(0, -0.4, 0), T.skin, null, null, rarm);
+        // legs (animated)
+        const lleg = new BABYLON.TransformNode('lleg', S.scene); lleg.parent = e; lleg.position.set(-0.24 * s, -0.3 * s, 0);
+        const rleg = new BABYLON.TransformNode('rleg', S.scene); rleg.parent = e; rleg.position.set(0.24 * s, -0.3 * s, 0);
+        part([0.3, 1.0, 0.32], new V3(0, -0.5, 0), T.pants, null, null, lleg);
+        part([0.3, 1.0, 0.32], new V3(0, -0.5, 0), T.pants, null, null, rleg);
+        e.metadata = { kind: 'zombie', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], arms: [larm, rarm], walk: Math.random() * 6, groundY: 2.3 };
+        attachHealthBar(e, 1.4, 2.7 * s);
+        if (S.codes.bighead) head.scaling.setAll(1.9);
+        enemies.push(e); return e;
     }
     function attachHealthBar(e, width, headY) {
         const bg = BABYLON.MeshBuilder.CreatePlane('hbBg', { width: width, height: 0.16 }, S.scene);
@@ -687,11 +854,11 @@ window.HELA = window.HELA || {};
         if (mx || mz) { move = fwd.scale(mz).add(right.scale(mx)); move.y = 0; move.normalize().scaleInPlace(speed * dt); }
         if (S.dashVel.lengthSquared() > 0.01) { move.addInPlace(S.dashVel.scale(dt)); S.dashVel.scaleInPlace(Math.pow(0.0001, dt)); if (S.dashVel.length() < 0.5) S.dashVel = V3.Zero(); }
         if (move.lengthSquared() > 0) tryMove(move);
-        player.position.y = 3.55;
+        player.position.y = S.groundY;
         if (mx || mz) { player.metadata.bob += dt * 9; player.position.y += Math.sin(player.metadata.bob) * 0.05; }
         player.rotation.y = S.yaw;
         const gun = player.getChildMeshes().find(m => m.name === 'gun'); if (gun) gun.rotation.x = -S.pitch * 0.5;
-        const b = CFG.worldBounds; player.position.x = Math.max(-b, Math.min(b, player.position.x)); player.position.z = Math.max(-b, Math.min(b, player.position.z));
+        const b = S.bounds; player.position.x = Math.max(-b, Math.min(b, player.position.x)); player.position.z = Math.max(-b, Math.min(b, player.position.z));
         updateCamera();
     }
     function tryMove(move) {
@@ -717,17 +884,22 @@ window.HELA = window.HELA || {};
         for (const e of enemies) {
             if (!e.metadata.alive) continue;
             const md = e.metadata;
+            const isZombie = md.kind === 'zombie';
+            const stopDist = md.kind === 'boss' ? 8 : (isZombie ? 1.9 : 2.6);
             const to = player.position.subtract(e.position); to.y = 0; const dist = to.length();
-            if (dist > (md.kind === 'boss' ? 8 : 2.6)) {
+            if (dist > stopDist) {
                 to.normalize(); e.position.addInPlace(to.scale(md.speed * dt)); e.position.y = md.groundY - 0.5; e.rotation.y = Math.atan2(to.x, to.z);
-                if (md.legs) { md.walk += dt * 9; md.legs[0].rotation.x = Math.sin(md.walk) * 0.6; md.legs[1].rotation.x = -Math.sin(md.walk) * 0.6; }
+                if (md.legs) { md.walk += dt * (isZombie ? 6 : 9); md.legs[0].rotation.x = Math.sin(md.walk) * 0.55; md.legs[1].rotation.x = -Math.sin(md.walk) * 0.55; }
+                if (md.arms && isZombie) { const sway = Math.sin(md.walk * 0.5) * 0.12; md.arms[0].rotation.x = -1.2 + sway; md.arms[1].rotation.x = -1.2 - sway; }
             }
             // health bar follow
             const bp = e.position.add(new V3(0, md.headY, 0));
             md.barBg && md.barBg.position.copyFrom(bp); md.barFg && md.barFg.position.copyFrom(bp);
             if (md.barFg) md.barFg.scaling.x = Math.max(0, md.health / md.maxHealth);
-            // fire
-            if (dist < (md.kind === 'boss' ? 60 : 42) && now - md.lastShot > md.fire) {
+            // attack
+            if (isZombie) {
+                if (dist <= stopDist + 0.6 && now - md.lastShot > md.fire) { md.lastShot = now; takeDamage(md.dmg + Math.random() * 4); if (HELA.Settings.get('shake')) addShake(0.12); }
+            } else if (dist < (md.kind === 'boss' ? 60 : 42) && now - md.lastShot > md.fire) {
                 md.lastShot = now;
                 if (md.kind === 'boss') { for (let k = -2; k <= 2; k++) spawnBolt(e, k * 0.12); }
                 else spawnBolt(e, 0);
@@ -773,14 +945,14 @@ window.HELA = window.HELA || {};
     function updateDome(t) { if (domeMesh) { domeMesh.rotation.y = t * 0.1; if (domeMesh.metadata.core) domeMesh.metadata.core.rotation.y = -t * 0.15; } if (S.scene) S.scene.fogDensity = S.level.fogDensity + Math.sin(t * 0.4) * 0.0018; }
 
     function drawMapTo(ctx, W, H, big) {
-        const b = CFG.worldBounds, scale = W / (b * 2), w2m = (x, z) => ({ x: (x + b) * scale, y: (z + b) * scale });
+        const b = S.bounds, scale = W / (b * 2), w2m = (x, z) => ({ x: (x + b) * scale, y: (z + b) * scale });
         ctx.fillStyle = 'rgba(6,10,18,0.92)'; ctx.fillRect(0, 0, W, H);
         ctx.strokeStyle = 'rgba(0,243,255,0.13)'; ctx.lineWidth = 1;
         const div = big ? 10 : 6; for (let i = 0; i <= div; i++) { const p = (i / div) * W; ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, H); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(W, p); ctx.stroke(); }
         for (const c of colliders) { const bb = c.getBoundingInfo().boundingBox; const mn = w2m(bb.minimumWorld.x, bb.minimumWorld.z), mx = w2m(bb.maximumWorld.x, bb.maximumWorld.z); ctx.fillStyle = 'rgba(80,100,130,0.25)'; ctx.fillRect(mn.x, mn.y, mx.x - mn.x, mx.y - mn.y); }
         for (const it of interactables) { const m = w2m(it.mesh.position.x, it.mesh.position.z); ctx.fillStyle = it.hacked ? '#00ffcc' : '#00ff88'; const r = big ? 5 : 2.5; ctx.fillRect(m.x - r, m.y - r, r * 2, r * 2); }
         for (const pk of pickups) { const m = w2m(pk.position.x, pk.position.z); ctx.fillStyle = '#ffee55'; ctx.fillRect(m.x - 1.5, m.y - 1.5, 3, 3); }
-        for (const e of enemies) { if (!e.metadata.alive) continue; const m = w2m(e.position.x, e.position.z); ctx.fillStyle = e.metadata.compromised ? '#00ffff' : (e.metadata.kind === 'boss' ? '#ff2266' : (e.metadata.kind === 'human' ? '#ffaa33' : '#ff3355')); const r = e.metadata.kind === 'boss' ? (big ? 9 : 6) : (big ? 5 : 4); ctx.beginPath(); ctx.arc(m.x, m.y, r, 0, 6.28); ctx.fill(); }
+        for (const e of enemies) { if (!e.metadata.alive) continue; const m = w2m(e.position.x, e.position.z); ctx.fillStyle = e.metadata.compromised ? '#00ffff' : (e.metadata.kind === 'boss' ? '#ff2266' : (e.metadata.kind === 'zombie' ? '#9bd14f' : (e.metadata.kind === 'human' ? '#ffaa33' : '#ff3355'))); const r = e.metadata.kind === 'boss' ? (big ? 9 : 6) : (big ? 5 : 4); ctx.beginPath(); ctx.arc(m.x, m.y, r, 0, 6.28); ctx.fill(); }
         if (player) { const pm = w2m(player.position.x, player.position.z); ctx.save(); ctx.translate(pm.x, pm.y); ctx.rotate(S.yaw + Math.PI); ctx.fillStyle = '#00f3ff'; const sc = big ? 1.8 : 1; ctx.beginPath(); ctx.moveTo(0, -7 * sc); ctx.lineTo(-5 * sc, 6 * sc); ctx.lineTo(5 * sc, 6 * sc); ctx.closePath(); ctx.fill(); ctx.restore(); }
         ctx.strokeStyle = 'rgba(0,243,255,0.5)'; ctx.lineWidth = 2; ctx.strokeRect(1, 1, W - 2, H - 2);
     }
@@ -867,7 +1039,7 @@ window.HELA = window.HELA || {};
         if (!S.scene) return;
         const dt = Math.min(engine.getDeltaTime() / 1000, 0.05), t = performance.now() / 1000;
         if (S.running && !S.paused) {
-            updatePlayer(dt); updateEnemies(dt); updateBolts(dt); updateParticles(); updateDome(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt);
+            updatePlayer(dt); updateEnemies(dt); updateBolts(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt);
             if (S.mouseDown && curW().auto) shoot();
             if (S.frame % 6 === 0) updateHUD();
             if (S.frame % 3 === 0) { const ray = new BABYLON.Ray(muzzle.getAbsolutePosition(), aimVec(0), 130); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
