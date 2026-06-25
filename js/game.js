@@ -75,11 +75,12 @@ window.HELA = window.HELA || {};
         curWeapon: 'spike', weaponState: {}, unlockedWeapons: { spike: true, sidearm: true },
         codes: {}, bossRef: null, mapOpen: false, frame: 0, fpsTime: 0,
         bounds: 70, groundY: 3.55, theme: 'neon',
+        fpv: true, vmKick: 0, vmBob: 0,
     };
     HELA.Game = { currentLevelId: 1 };
 
     let engine, camera, glow, shadowGen, pipeline, ssaoPipe;
-    let player, muzzle, playerHead;
+    let player, muzzle, playerHead, vmRoot, vmMuzzle;
     let enemies = [], colliders = [], interactables = [], particles = [], bolts = [], pickups = [];
     let windNodes = [], motes = [];
     let domeMesh, domeShieldUp = true, minimapCtx, bigmapCtx;
@@ -217,6 +218,7 @@ window.HELA = window.HELA || {};
         buildLights(lv);
         buildEnvironment(lv);
         buildPlayer();
+        buildViewmodel();
         const termCount = (lv.theme === 'forest' || lv.objective === 'boss') ? 0 : (lv.objective === 'hack' ? 3 : 2);
         buildTerminals(termCount);
         S.terminalsTotal = interactables.length;
@@ -463,6 +465,47 @@ window.HELA = window.HELA || {};
         part('pack', [0.7, 0.9, 0.5], new V3(0, 0.6, -0.65), '#1b212b');
         muzzle = new BABYLON.TransformNode('muzzle', S.scene); muzzle.parent = player; muzzle.position.set(0.84, 0.7, 2.0);
         if (S.codes.bighead) playerHead.scaling.setAll(2.0);
+        if (S.fpv) setBodyVisible(false);
+    }
+    function setBodyVisible(vis) { if (player) player.getChildMeshes().forEach(m => m.setEnabled(vis)); }
+
+    // First-person viewmodel weapon (parented to the camera, drawn on top).
+    function buildViewmodel() {
+        if (!camera) return;
+        vmRoot = new BABYLON.TransformNode('vm', S.scene); vmRoot.parent = camera;
+        vmRoot.position = new V3(0.32, -0.30, 0.60);
+        const part = (dim, pos, hex, em, emAmt) => {
+            const m = BABYLON.MeshBuilder.CreateBox('vmp', { width: dim[0], height: dim[1], depth: dim[2] }, S.scene);
+            m.material = flatMat('vm' + hex, hex, em, emAmt); m.position.copyFrom(pos); m.parent = vmRoot;
+            m.isPickable = false; m.renderingGroupId = 1; return m;
+        };
+        part([0.13, 0.17, 0.95], new V3(0, 0, 0), '#26292f');          // receiver
+        part([0.10, 0.28, 0.20], new V3(0, -0.22, -0.18), '#1b1e22');  // magazine
+        part([0.085, 0.10, 0.55], new V3(0, 0.03, 0.62), '#15171b');   // barrel
+        part([0.06, 0.13, 0.07], new V3(0, 0.15, 0.18), '#0f1114');    // front sight
+        part([0.06, 0.07, 0.30], new V3(0, 0.13, -0.05), '#0f1114');   // top rail
+        part([0.18, 0.16, 0.20], new V3(-0.02, -0.13, 0.10), '#caa472');// front hand
+        part([0.18, 0.16, 0.18], new V3(-0.02, -0.14, -0.30), '#caa472');// rear hand
+        vmMuzzle = new BABYLON.TransformNode('vmMuzzle', S.scene); vmMuzzle.parent = vmRoot; vmMuzzle.position = new V3(0, 0.05, 0.95);
+        vmRoot.setEnabled(S.fpv);
+    }
+    function updateViewmodel(dt) {
+        if (!vmRoot || !S.fpv) return;
+        const moving = S.keys['w'] || S.keys['a'] || S.keys['s'] || S.keys['d'];
+        S.vmBob += dt * (moving ? 9 : 2.4);
+        const bx = Math.sin(S.vmBob) * 0.012 * (moving ? 1 : 0.4);
+        const by = Math.abs(Math.cos(S.vmBob)) * 0.012 * (moving ? 1 : 0.3);
+        S.vmKick *= Math.pow(0.0015, dt); if (S.vmKick < 0.001) S.vmKick = 0;
+        vmRoot.position.x = 0.32 + bx;
+        vmRoot.position.y = -0.30 + by;
+        vmRoot.position.z = 0.60 - S.vmKick * 0.45;
+        vmRoot.rotation.x = -S.vmKick * 0.9;
+    }
+    function toggleView() {
+        S.fpv = !S.fpv;
+        if (vmRoot) vmRoot.setEnabled(S.fpv);
+        setBodyVisible(!S.fpv);
+        status(S.fpv ? 'FIRST-PERSON VIEW' : 'THIRD-PERSON VIEW', 1100);
     }
     function applyBigHead() {
         if (playerHead) playerHead.scaling.setAll(S.codes.bighead ? 2.0 : 1.0);
@@ -754,16 +797,19 @@ window.HELA = window.HELA || {};
         if (a.mag <= 0 && !S.codes.infammo) { reload(); return; }
         S.lastShot = now; if (!S.codes.infammo) a.mag--; updateHUD(); Audio.shoot(w.id);
         if (HELA.Settings.get('shake')) addShake(w.recoil);
-        const origin = muzzle.getAbsolutePosition();
-        flash(origin, w.tracer, 3.0, 70);
+        S.vmKick = Math.max(S.vmKick, w.recoil);
+        // ray from the eye (FPS) so the crosshair is the true aim point
+        const origin = (S.fpv ? camera.position : muzzle.getAbsolutePosition()).clone();
+        const visualStart = (S.fpv && vmMuzzle) ? vmMuzzle.getAbsolutePosition() : origin;
+        flash(visualStart, w.tracer, 3.0, 70);
         for (let p = 0; p < w.pellets; p++) {
             const dir = aimVec(w.spread);
-            const ray = new BABYLON.Ray(origin, dir, 130);
+            const ray = new BABYLON.Ray(origin, dir, 140);
             const hit = S.scene.pickWithRay(ray, (m) => m.isPickable && m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive);
             let end;
             if (hit && hit.hit) { end = hit.pickedPoint; damageEnemy(hit.pickedMesh.metadata.enemy, w.dmg, end); }
-            else { const wh = S.scene.pickWithRay(ray, (m) => m.isPickable); end = (wh && wh.hit) ? wh.pickedPoint : origin.add(dir.scale(90)); if (p === 0) impact(end); }
-            if (p % 2 === 0) tracer(origin, end, w.tracer);
+            else { const wh = S.scene.pickWithRay(ray, (m) => m.isPickable); end = (wh && wh.hit) ? wh.pickedPoint : origin.add(dir.scale(100)); if (p === 0) impact(end); }
+            if (p % 2 === 0) tracer(visualStart, end, w.tracer);
         }
     }
     function damageEnemy(e, dmg, point) {
@@ -872,6 +918,13 @@ window.HELA = window.HELA || {};
         else { if (test('x')) player.position.x += move.x; if (test('z')) player.position.z += move.z; }
     }
     function updateCamera() {
+        if (S.fpv) {
+            const eye = player.position.add(new V3(0, 1.62, 0));
+            if (S.shake > 0.001) { eye.addInPlace(new V3((Math.random() - 0.5) * S.shake * 0.5, (Math.random() - 0.5) * S.shake * 0.5, (Math.random() - 0.5) * S.shake * 0.5)); S.shake *= 0.86; }
+            camera.position.copyFrom(eye);
+            camera.setTarget(eye.add(aimVec(0)));
+            return;
+        }
         const dist = 12, height = 5.2, cp = Math.cos(S.pitch);
         const back = new V3(-Math.sin(S.yaw) * cp, Math.sin(S.pitch), -Math.cos(S.yaw) * cp);
         const desired = player.position.add(back.scale(dist)).add(new V3(0, height, 0));
@@ -1003,7 +1056,8 @@ window.HELA = window.HELA || {};
             S.yaw += e.movementX * sens;
             const inv = HELA.Settings.get('invertY') ? -1 : 1;
             S.pitch -= e.movementY * sens * inv;
-            S.pitch = Math.max(-0.6, Math.min(0.9, S.pitch));
+            const lim = S.fpv ? 1.25 : 0.9;
+            S.pitch = Math.max(-lim, Math.min(lim, S.pitch));
         });
         document.addEventListener('keydown', (e) => {
             if (!S.running && !S.paused) return;
@@ -1015,6 +1069,7 @@ window.HELA = window.HELA || {};
             if (k === 'm') { S.muted = !S.muted; $('mute-ind').textContent = S.muted ? '♪ MUTED' : ''; }
             if (k === 'tab') { e.preventDefault(); toggleMap(true); }
             if (k === 'q') cycleWeapon(-1);
+            if (k === 'v') toggleView();
             if (['1', '2', '3', '4'].includes(k)) { const id = HELA.WEAPON_ORDER[parseInt(k) - 1]; if (id) switchWeapon(id); }
             if (e.key === 'Escape') { if (S.running && !S.paused) HELA.Game.togglePause(); }
         });
@@ -1039,10 +1094,10 @@ window.HELA = window.HELA || {};
         if (!S.scene) return;
         const dt = Math.min(engine.getDeltaTime() / 1000, 0.05), t = performance.now() / 1000;
         if (S.running && !S.paused) {
-            updatePlayer(dt); updateEnemies(dt); updateBolts(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt);
+            updatePlayer(dt); updateViewmodel(dt); updateEnemies(dt); updateBolts(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt);
             if (S.mouseDown && curW().auto) shoot();
             if (S.frame % 6 === 0) updateHUD();
-            if (S.frame % 3 === 0) { const ray = new BABYLON.Ray(muzzle.getAbsolutePosition(), aimVec(0), 130); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
+            if (S.frame % 3 === 0) { const o = S.fpv ? camera.position : muzzle.getAbsolutePosition(); const ray = new BABYLON.Ray(o, aimVec(0), 140); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
             if (S.mapOpen && bigmapCtx && S.frame % 4 === 0) drawMapTo(bigmapCtx, 520, 520, true);
         }
         S.scene.render();

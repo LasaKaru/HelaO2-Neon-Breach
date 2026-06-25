@@ -66,7 +66,9 @@ chromatic aberration · film grain · vignette · tone mapping, over flat-shaded
 | `Shift` | Sprint | | `TAB` | Tactical map |
 | `Space` | Dash | | `P` / `Esc` | Pause |
 | `LMB` | Fire | | `M` | Mute |
-| `R` | Reload | | | |
+| `R` | Reload | | `V` | First / third-person |
+
+The game plays in **first-person** by default (viewmodel weapon in hand, like the reference); press `V` for the over-the-shoulder third-person camera at any time.
 
 ## Tech notes
 Plain `<script>` modules on a global `HELA` namespace (works over `file://`, no bundler).
