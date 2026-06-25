@@ -1011,9 +1011,10 @@ window.HELA = window.HELA || {};
         S.lastShot = now; if (!S.codes.infammo) a.mag--; updateHUD(); Audio.shoot(w.id);
         if (HELA.Settings.get('shake')) addShake(w.recoil);
         S.vmKick = Math.max(S.vmKick, w.recoil);
-        // ray from the eye (FPS) so the crosshair is the true aim point
-        const origin = (S.fpv ? camera.position : muzzle.getAbsolutePosition()).clone();
-        const visualStart = (S.fpv && vmMuzzle) ? vmMuzzle.getAbsolutePosition() : origin;
+        // Cast from the camera through screen-centre so the shot always lands on
+        // the crosshair; the visible tracer starts at the gun muzzle.
+        const origin = camera.position.clone();
+        const visualStart = S.fpv ? (vmMuzzle ? vmMuzzle.getAbsolutePosition() : origin) : muzzle.getAbsolutePosition();
         flash(visualStart, w.tracer, 3.0, 70);
         for (let p = 0; p < w.pellets; p++) {
             const dir = aimVec(w.spread);
@@ -1113,18 +1114,32 @@ window.HELA = window.HELA || {};
         if (mx || mz) { move = fwd.scale(mz).add(right.scale(mx)); move.y = 0; move.normalize().scaleInPlace(speed * dt); }
         if (S.dashVel.lengthSquared() > 0.01) { move.addInPlace(S.dashVel.scale(dt)); S.dashVel.scaleInPlace(Math.pow(0.0001, dt)); if (S.dashVel.length() < 0.5) S.dashVel = V3.Zero(); }
         if (move.lengthSquared() > 0) tryMove(move);
-        player.position.y = S.groundY;
-        if (mx || mz) { player.metadata.bob += dt * 9; player.position.y += Math.sin(player.metadata.bob) * 0.05; }
+        // stand on whatever surface is underfoot (ground OR the cracked platform)
+        const down = new BABYLON.Ray(new V3(player.position.x, player.position.y + 4, player.position.z), new V3(0, -1, 0), 16);
+        const gh = S.scene.pickWithRay(down, groundPick);
+        const surf = (gh && gh.hit) ? gh.pickedPoint.y : 0;
+        let targetY = surf + 1.7;
+        if (mx || mz) { player.metadata.bob += dt * 9; targetY += Math.sin(player.metadata.bob) * 0.06; }
+        player.position.y += (targetY - player.position.y) * Math.min(1, dt * 14);
+        S.groundY = surf + 1.7;
         player.rotation.y = S.yaw;
         const gun = player.getChildMeshes().find(m => m.name === 'gun'); if (gun) gun.rotation.x = -S.pitch * 0.5;
         const b = S.bounds; player.position.x = Math.max(-b, Math.min(b, player.position.x)); player.position.z = Math.max(-b, Math.min(b, player.position.z));
         updateCamera();
     }
+    function groundPick(m) { return m.name === 'ground' || colliders.indexOf(m) >= 0; }
     function tryMove(move) {
         const test = (axis) => {
             const np = player.position.clone(); if (axis === 'x') np.x += move.x; else if (axis === 'z') np.z += move.z; else { np.x += move.x; np.z += move.z; }
-            const pBox = new BABYLON.BoundingBox(new V3(np.x - 0.7, 0.5, np.z - 0.7), new V3(np.x + 0.7, 4.0, np.z + 0.7));
-            for (const c of colliders) { c.computeWorldMatrix(false); if (BABYLON.BoundingBox.Intersects(pBox, c.getBoundingInfo().boundingBox)) return false; }
+            // Box sits ABOVE the floor the player stands on (so the start platform / ground
+            // never blocks movement) but still catches walls, towers, trees and monoliths.
+            const pBox = new BABYLON.BoundingBox(new V3(np.x - 0.6, S.groundY + 0.4, np.z - 0.6), new V3(np.x + 0.6, S.groundY + 2.3, np.z + 0.6));
+            for (const c of colliders) {
+                c.computeWorldMatrix(false);
+                const cb = c.getBoundingInfo().boundingBox;
+                if (cb.maximumWorld.y <= S.groundY + 0.4) continue;     // low enough to stand on — ignore
+                if (BABYLON.BoundingBox.Intersects(pBox, cb)) return false;
+            }
             return true;
         };
         if (test('both')) { player.position.x += move.x; player.position.z += move.z; }
@@ -1138,12 +1153,15 @@ window.HELA = window.HELA || {};
             camera.setTarget(eye.add(aimVec(0)));
             return;
         }
-        const dist = 12, height = 5.2, cp = Math.cos(S.pitch);
-        const back = new V3(-Math.sin(S.yaw) * cp, Math.sin(S.pitch), -Math.cos(S.yaw) * cp);
-        const desired = player.position.add(back.scale(dist)).add(new V3(0, height, 0));
-        camera.position = V3.Lerp(camera.position, desired, 0.14);
+        // Third-person: sit behind/above the operative but LOOK ALONG the aim
+        // direction, so the screen-centre crosshair is the true line of fire.
+        const aim = aimVec(0);
+        const eye = player.position.add(new V3(0, 1.7, 0));
+        const desired = eye.subtract(aim.scale(7.5)).add(new V3(0, 2.4, 0));
+        if (desired.y < S.groundY + 1) desired.y = S.groundY + 1;
+        camera.position = V3.Lerp(camera.position, desired, 0.18);
         if (S.shake > 0.001) { camera.position.addInPlace(new V3((Math.random() - 0.5) * S.shake, (Math.random() - 0.5) * S.shake, (Math.random() - 0.5) * S.shake)); S.shake *= 0.86; }
-        camera.setTarget(player.position.add(new V3(0, 2.0, 0)));
+        camera.setTarget(eye.add(aim.scale(14)));
     }
     function updateEnemies(dt) {
         if (!S.running) return; const now = performance.now();
@@ -1320,7 +1338,7 @@ window.HELA = window.HELA || {};
             updatePlayer(dt); updateViewmodel(dt); updateEnemies(dt); updateBolts(dt); updateGrenades(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt);
             if (S.mouseDown && curW().auto) shoot();
             if (S.frame % 6 === 0) updateHUD();
-            if (S.frame % 3 === 0) { const o = S.fpv ? camera.position : muzzle.getAbsolutePosition(); const ray = new BABYLON.Ray(o, aimVec(0), 140); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
+            if (S.frame % 3 === 0) { const ray = new BABYLON.Ray(camera.position, aimVec(0), 140); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
             if (S.mapOpen && bigmapCtx && S.frame % 4 === 0) drawMapTo(bigmapCtx, 520, 520, true);
         }
         S.scene.render();

@@ -5,7 +5,7 @@
 // =====================================================================
 window.HELA = window.HELA || {};
 
-HELA.VERSION = "0.7.0";
+HELA.VERSION = "0.7.1";
 
 // ---- Studio / company identity (single-word HelaO2) ----
 HELA.STUDIO  = "HelaO2 Studio";
