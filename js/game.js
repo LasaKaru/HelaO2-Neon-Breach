@@ -82,7 +82,7 @@ window.HELA = window.HELA || {};
     let engine, camera, glow, shadowGen, pipeline, ssaoPipe;
     let player, muzzle, playerHead, vmRoot, vmMuzzle;
     let enemies = [], colliders = [], interactables = [], particles = [], bolts = [], pickups = [];
-    let windNodes = [], motes = [], grenadesArr = [];
+    let windNodes = [], motes = [], grenadesArr = [], mistArr = [];
     let domeMesh, domeShieldUp = true, minimapCtx, bigmapCtx;
     let canvas;
     let SPAWN = [];
@@ -227,7 +227,7 @@ window.HELA = window.HELA || {};
         S.bounds = lv.bigMap ? 112 : 70;
         S.groundY = (S.theme === 'forest') ? 1.85 : 3.55;
         SPAWN = buildSpawnRing(S.bounds);
-        windNodes = []; motes = [];
+        windNodes = []; motes = []; mistArr = [];
 
         const scene = new BABYLON.Scene(engine); S.scene = scene;
         scene.clearColor = new BABYLON.Color4(...hexToRgb01(lv.sky || lv.fog), 1);
@@ -309,6 +309,19 @@ window.HELA = window.HELA || {};
         const layout = [[-32,-18,11,28,9],[-38,8,8,22,7],[-25,24,9,19,8],[26,-25,10,31,8],[34,4,7,26,6],[18,20,12,17,9],[-8,-40,14,36,11],[16,-44,9,26,7],[44,-10,9,30,8],[-46,-6,8,24,7]];
         layout.forEach((b, i) => addBuilding(b[0] + (Math.random() - 0.5) * 6, b[1] + (Math.random() - 0.5) * 6, b[2], b[3] * (0.8 + Math.random() * 0.5), b[4], cityColors[i % 4]));
 
+        // tall ruined towers inside the arena (windowed + mossed later)
+        [[-30,-30,9,48,9],[31,-34,10,60,10],[-42,16,8,42,8],[42,18,9,52,9],[6,-52,12,66,12],[-16,32,10,46,10],[50,-2,9,40,9]]
+            .forEach((t, i) => addBuilding(t[0], t[1], t[2], t[3], t[4], ['#5a6358', '#525b50'][i % 2]));
+        // huge moss-covered concrete monolith chunks (cover)
+        for (let i = 0; i < 12; i++) {
+            const x = (Math.random() - 0.5) * S.bounds * 1.3, z = (Math.random() - 0.5) * S.bounds * 1.3;
+            if (Math.hypot(x + 4, z - 6) < 16) continue;
+            const w = 5 + Math.random() * 7, h = 5 + Math.random() * 9, d = 5 + Math.random() * 7;
+            const mk = addBox('monolith', { w, h, d }, new V3(x, h / 2, z), '#54604f', true); mk.rotation.y = (Math.random() - 0.5) * 0.7;
+        }
+        // dense skyscraper skyline fading into the mist
+        buildSkyline(S.bounds);
+
         // themed neon signs
         const signs = lv.signs || [];
         if (signs[0]) neonSign(-29, 14, -17, signs[0][0], signs[0][1], 6);
@@ -317,6 +330,49 @@ window.HELA = window.HELA || {};
         floatingPanel(8, 6, 18, lv.accent); floatingPanel(-14, 7.5, -9, '#ff00aa');
 
         overgrow(lv);   // trees, grass, moss, vines, rubble reclaiming the ruins
+        addCables();    // drooping power lines between the tall ruins
+        addMist(S.bounds); // low-lying volumetric haze
+    }
+    // dense background skyscrapers (non-colliding, lost in fog)
+    function buildSkyline(B) {
+        const scene = S.scene, greys = ['#7e857b', '#737a70', '#868d82', '#6b7268'];
+        for (let i = 0; i < 50; i++) {
+            const a = Math.random() * Math.PI * 2, r = B * 1.45 + Math.random() * B * 1.2;
+            const x = Math.cos(a) * r, z = Math.sin(a) * r, h = 40 + Math.random() * 85, w = 8 + Math.random() * 16, d = 8 + Math.random() * 16;
+            const b = BABYLON.MeshBuilder.CreateBox('skytower', { width: w, height: h, depth: d }, scene);
+            const m = new BABYLON.StandardMaterial('skyM', scene); m.diffuseColor = C.FromHexString(greys[i % 4]); m.specularColor = new C(0, 0, 0);
+            b.material = m; b.position.set(x, h / 2, z); b.isPickable = false;
+            if (Math.random() > 0.6) { const an = BABYLON.MeshBuilder.CreateCylinder('ant', { height: 8 + Math.random() * 10, diameter: 0.6, tessellation: 4 }, scene); an.material = m; an.position.set(x, h + 5, z); an.isPickable = false; }
+        }
+    }
+    function addCable(a, b) {
+        const pts = [], seg = 12, sag = 2.5 + Math.random() * 2.5;
+        for (let i = 0; i <= seg; i++) { const t = i / seg, p = V3.Lerp(a, b, t); p.y -= Math.sin(t * Math.PI) * sag; pts.push(p); }
+        const l = BABYLON.MeshBuilder.CreateLines('cable', { points: pts }, S.scene); l.color = new C(0.06, 0.06, 0.07); l.isPickable = false;
+    }
+    function addCables() {
+        const tall = colliders.filter(c => { const bb = c.getBoundingInfo().boundingBox; return (bb.maximumWorld.y - bb.minimumWorld.y) > 22; });
+        let made = 0;
+        for (let i = 0; i < tall.length && made < 9; i++) {
+            const a = tall[i], b = tall[(i + 1) % tall.length]; if (a === b) continue;
+            const ay = a.getBoundingInfo().boundingBox.maximumWorld.y, by = b.getBoundingInfo().boundingBox.maximumWorld.y;
+            const at = new V3(a.position.x, ay - 2, a.position.z), bt = new V3(b.position.x, by - 2, b.position.z);
+            if (V3.Distance(at, bt) > 75) continue;
+            addCable(at, bt); made++;
+        }
+    }
+    function addMist(B) {
+        const dt = new BABYLON.DynamicTexture('mistTex', { width: 128, height: 128 }, S.scene, false);
+        const ctx = dt.getContext(), g = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+        g.addColorStop(0, 'rgba(222,229,223,0.85)'); g.addColorStop(1, 'rgba(222,229,223,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128); dt.update(); dt.hasAlpha = true;
+        for (let i = 0; i < 12; i++) {
+            const p = BABYLON.MeshBuilder.CreatePlane('mist', { size: 16 + Math.random() * 22 }, S.scene);
+            const m = new BABYLON.StandardMaterial('mistM', S.scene); m.diffuseTexture = dt; m.opacityTexture = dt; m.emissiveColor = C.FromHexString('#ccd5cf'); m.disableLighting = true; m.alpha = 0.5; m.backFaceCulling = false;
+            p.material = m; p.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL; p.isPickable = false;
+            p.position.set((Math.random() - 0.5) * B * 1.6, 2 + Math.random() * 5, (Math.random() - 0.5) * B * 1.6);
+            mistArr.push({ mesh: p, sp: 0.2 + Math.random() * 0.5, phase: Math.random() * 6.28, drift: (Math.random() - 0.5) * 0.012 });
+        }
     }
 
     // ------- nature reclaiming the ruins -------
@@ -337,16 +393,18 @@ window.HELA = window.HELA || {};
                 windNodes.push({ node: v, phase: Math.random() * 6.28, amp: 0.05, speed: 0.7 });
             }
         }
-        // trees growing through the city
-        const density = lv.treeDensity || 1, treeCount = Math.floor(36 * density);
+        // trees growing through the city — dense
+        const density = lv.treeDensity || 1, treeCount = Math.floor(58 * density);
         let placed = 0, guard = 0;
-        while (placed < treeCount && guard < 600) {
-            guard++; const x = (Math.random() - 0.5) * B * 1.8, z = (Math.random() - 0.5) * B * 1.8;
-            if (Math.hypot(x + 4, z - 6) < 14) continue;   // keep the start platform clear
-            makeTree(x, z, 0.8 + Math.random() * 0.9, false); placed++;
+        while (placed < treeCount && guard < 900) {
+            guard++; const x = (Math.random() - 0.5) * B * 1.9, z = (Math.random() - 0.5) * B * 1.9;
+            if (Math.hypot(x + 4, z - 6) < 13) continue;   // keep the start platform clear
+            makeTree(x, z, 0.8 + Math.random() * 1.0, false); placed++;
         }
-        // hazy distant treeline
-        for (let i = 0; i < 44; i++) { const a = (i / 44) * Math.PI * 2, r = B * 1.7 + Math.random() * 30; makeTree(Math.cos(a) * r, Math.sin(a) * r, 1.2 + Math.random() * 0.6, true); }
+        // big canopy "hero" trees framing the arena
+        [[22, 20], [-24, 18], [26, -12], [-20, -16], [14, 26]].forEach(([x, z]) => makeTree(x, z, 2.5 + Math.random() * 1.1, false));
+        // thick hazy distant treeline
+        for (let i = 0; i < 64; i++) { const a = (i / 64) * Math.PI * 2, r = B * 1.55 + Math.random() * 40; makeTree(Math.cos(a) * r, Math.sin(a) * r, 1.3 + Math.random() * 0.8, true); }
         // rubble boulders
         for (let i = 0; i < 18; i++) { const x = (Math.random() - 0.5) * B * 1.5, z = (Math.random() - 0.5) * B * 1.5; if (Math.hypot(x + 4, z - 6) < 10) continue; makeRock(x, z, 0.7 + Math.random() * 1.6); }
         // grass everywhere + drifting leaves
@@ -465,6 +523,11 @@ window.HELA = window.HELA || {};
         for (const mo of motes) {
             mo.mesh.position.x += drift; mo.mesh.position.y += Math.sin(t * mo.sp + mo.phase) * 0.004;
             if (mo.mesh.position.x > S.bounds * 0.9) mo.mesh.position.x = -S.bounds * 0.9;
+        }
+        for (const mi of mistArr) {
+            mi.mesh.position.x += mi.drift; mi.mesh.position.y += Math.sin(t * mi.sp + mi.phase) * 0.003;
+            if (mi.mesh.position.x > S.bounds) mi.mesh.position.x = -S.bounds;
+            else if (mi.mesh.position.x < -S.bounds) mi.mesh.position.x = S.bounds;
         }
     }
 
