@@ -253,7 +253,7 @@ window.HELA = window.HELA || {};
         const scene = S.scene;
         // Misty daylight reclaimed-ruins lighting for every mission.
         const hemi = new BABYLON.HemisphericLight('hemi', new V3(0.15, 1, 0.08), scene);
-        hemi.intensity = 0.92; hemi.diffuse = C.FromHexString('#e4eae1'); hemi.groundColor = C.FromHexString('#3a4634'); hemi.specular = new C(0.12, 0.12, 0.14);
+        hemi.intensity = 0.8; hemi.diffuse = C.FromHexString('#d6ddd4'); hemi.groundColor = C.FromHexString('#33402d'); hemi.specular = new C(0.12, 0.12, 0.14);
         const sun = new BABYLON.DirectionalLight('sun', new V3(-0.5, -0.85, 0.35), scene);
         sun.position = new V3(70, 105, -60); sun.intensity = 1.05; sun.diffuse = C.FromHexString('#fff1d8');
         shadowGen = new BABYLON.ShadowGenerator(1536, sun); shadowGen.useBlurExponentialShadowMap = true; shadowGen.blurKernel = 26; shadowGen.darkness = 0.5;
@@ -609,7 +609,7 @@ window.HELA = window.HELA || {};
     function buildViewmodel() {
         if (!camera) return;
         vmRoot = new BABYLON.TransformNode('vm', S.scene); vmRoot.parent = camera;
-        vmRoot.position = new V3(0.32, -0.30, 0.60);
+        vmRoot.position = new V3(0.44, -0.34, 0.60); vmRoot.rotation.y = -0.06;
         const part = (dim, pos, hex, em, emAmt) => {
             const m = BABYLON.MeshBuilder.CreateBox('vmp', { width: dim[0], height: dim[1], depth: dim[2] }, S.scene);
             m.material = flatMat('vm' + hex, hex, em, emAmt); m.position.copyFrom(pos); m.parent = vmRoot;
@@ -632,8 +632,8 @@ window.HELA = window.HELA || {};
         const bx = Math.sin(S.vmBob) * 0.012 * (moving ? 1 : 0.4);
         const by = Math.abs(Math.cos(S.vmBob)) * 0.012 * (moving ? 1 : 0.3);
         S.vmKick *= Math.pow(0.0015, dt); if (S.vmKick < 0.001) S.vmKick = 0;
-        vmRoot.position.x = 0.32 + bx;
-        vmRoot.position.y = -0.30 + by;
+        vmRoot.position.x = 0.44 + bx;
+        vmRoot.position.y = -0.34 + by;
         vmRoot.position.z = 0.60 - S.vmKick * 0.45;
         vmRoot.rotation.x = -S.vmKick * 0.9;
     }
@@ -710,7 +710,7 @@ window.HELA = window.HELA || {};
         pipeline.imageProcessingEnabled = true;
         pipeline.imageProcessing.vignetteEnabled = !forest; pipeline.imageProcessing.vignetteWeight = 1.2;
         pipeline.imageProcessing.vignetteColor = new BABYLON.Color4(0, 0.02, 0.05, 1);
-        pipeline.imageProcessing.contrast = forest ? 1.08 : 1.18; pipeline.imageProcessing.exposure = forest ? 1.22 : 1.12;
+        pipeline.imageProcessing.contrast = forest ? 1.12 : 1.18; pipeline.imageProcessing.exposure = forest ? 1.08 : 1.12;
         pipeline.imageProcessing.toneMappingEnabled = true;
         pipeline.fxaaEnabled = true;
         pipeline.samples = 4;
