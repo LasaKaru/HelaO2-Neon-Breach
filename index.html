@@ -27,6 +27,7 @@
             <p class="tag">An atmospheric low-poly third-person shooter. Breach the neon haze, Data-Spike enemy defenses, and clear the HELA-02 sector across four escalating missions.</p>
             <div class="btn-row">
                 <button class="btn primary" id="btn-play">▶ PLAY</button>
+                <button class="btn" id="btn-landing-random">⚄ RANDOM OP</button>
                 <button class="btn" id="btn-landing-missions">MISSIONS</button>
                 <button class="btn ghost" id="btn-landing-settings">SETTINGS</button>
                 <button class="btn ghost" id="btn-menu">MENU</button>
@@ -47,6 +48,7 @@
             <h2>MAIN MENU</h2>
             <div class="menu-item" id="m-new"><span>NEW PROTOCOL <div class="sub">Start from Mission 01</div></span><span class="arrow">▶</span></div>
             <div class="menu-item" id="m-continue"><span>CONTINUE <div class="sub">No saved protocol</div></span><span class="arrow">▶</span></div>
+            <div class="menu-item" id="m-random"><span>RANDOM OP <div class="sub">Procedural mission & loot</div></span><span class="arrow">⚄</span></div>
             <div class="menu-item" id="m-missions"><span>MISSION SELECT <div class="sub">Choose a deployment</div></span><span class="arrow">▶</span></div>
             <div class="menu-item" id="m-settings"><span>SETTINGS <div class="sub">Audio · controls · graphics</div></span><span class="arrow">▶</span></div>
             <div class="menu-item" id="m-codes"><span>SECRET CODES <div class="sub">Enter cheat protocols</div></span><span class="arrow">▶</span></div>
@@ -188,6 +190,7 @@
 
         <div id="score-panel" class="hud-panel">SCORE<br><span id="score-value">0</span><div id="combo"></div></div>
         <div id="minimap-container" class="hud-panel"><canvas id="minimap" width="156" height="156"></canvas></div>
+        <div id="inventory"></div>
 
         <div id="boss-bar" class="hidden">
             <div id="boss-name">OMEGA WAR-MECH</div>
@@ -204,7 +207,7 @@
             <strong>CONTROLS</strong><br>
             <kbd>WASD</kbd> Move · <kbd>MOUSE</kbd> Aim · <kbd>SHIFT</kbd> Sprint · <kbd>SPACE</kbd> Dash<br>
             <kbd>LMB</kbd> Fire · <kbd>R</kbd> Reload · <kbd>1-4/Q</kbd> Weapon · <kbd>E</kbd> Data-Spike<br>
-            <kbd>TAB</kbd> Map · <kbd>V</kbd> 1st/3rd View · <kbd>P/ESC</kbd> Pause · <kbd>M</kbd> Mute
+            <kbd>H</kbd> Medkit · <kbd>G</kbd> Grenade · <kbd>TAB</kbd> Map · <kbd>V</kbd> View · <kbd>P</kbd> Pause · <kbd>M</kbd> Mute
         </div>
         <div id="fps"></div>
         <div id="mute-ind"></div>

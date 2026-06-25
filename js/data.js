@@ -5,7 +5,7 @@
 // =====================================================================
 window.HELA = window.HELA || {};
 
-HELA.VERSION = "0.5.0";
+HELA.VERSION = "0.6.0";
 
 // ---- Studio / company identity (single-word HelaO2) ----
 HELA.STUDIO  = "HelaO2 Studio";
@@ -43,50 +43,61 @@ HELA.ENEMY_TYPES = {
 };
 
 // ---- Levels / Missions ---------------------------------------------
-// theme: 'forest' (bright, clear, open) | 'neon' (moody city)
-// objective: 'survive' | 'hack' | 'eliminate' | 'boss'
+// All missions share the OVERGROWN NEON RUINS theme — misty daylight,
+// mossy concrete reclaimed by trees & grass, neon signs still glowing.
+// objective: 'survive' | 'collect' | 'hack' | 'eliminate' | 'boss'
 HELA.LEVELS = [
     {
-        id: 1, name: "VERDANT", jp: "森の生存", codename: "OP-VERDANT", theme: 'forest',
-        objective: 'survive', waves: 8, bigMap: true,
-        sky: '#bcdcf2', fog: '#cfe3ee', fogDensity: 0.0045, ground: '#5d7a39', accent: '#8fd14f',
-        enemyPool: ['zombie', 'zombie', 'runner', 'lurker'],
-        brief: "A horde of the infected has overrun the Verdant sector. Survive 8 waves across the open forest clearing — use the treeline and rocks for cover.",
-        signs: [],
-    },
-    {
-        id: 2, name: "NEON BREACH", jp: "ネオン侵入", codename: "OP-HELA", theme: 'neon',
-        objective: 'survive', waves: 3,
-        fog: '#0a0e16', fogDensity: 0.012, ground: '#161b28', accent: '#00f3ff',
-        enemyPool: ['scout', 'drone'],
-        brief: "Hostile drones have breached the HELA-02 city sector. Hold the plaza and clear all attack waves.",
+        id: 1, name: "OVERGROWN PLAZA", jp: "廃墟の広場", codename: "OP-VERDANT", theme: 'ruins',
+        objective: 'survive', waves: 5, bigMap: true,
+        sky: '#cdd6cf', fog: '#b7c4ba', fogDensity: 0.011, ground: '#36422f', accent: '#00f3ff',
+        enemyPool: ['drone', 'soldier'],
+        brief: "The HELA-02 plaza has been reclaimed by the wild. Hold the cracked platform and clear 5 waves amid the overgrown ruins. Grab caches you find along the way.",
         signs: [['ヘラ02', '#ffcc00'], ['HelaO2', '#00f3ff'], ['ゲームセンター', '#ff00aa']],
     },
     {
-        id: 3, name: "DATA HEIST", jp: "データ強奪", codename: "OP-SPIKE", theme: 'neon',
+        id: 2, name: "SALVAGE RUN", jp: "回収任務", codename: "OP-CACHE", theme: 'ruins',
+        objective: 'collect', collectTarget: 6, waves: 99, bigMap: true,
+        sky: '#ccd5cd', fog: '#aebfb0', fogDensity: 0.012, ground: '#313d2b', accent: '#00ff88',
+        enemyPool: ['drone', 'soldier'],
+        brief: "Recover 6 data-caches scattered through the ruins while the garrison hunts you. Cache pings show on your minimap — collect them all to extract.",
+        signs: [['データ', '#00ff88'], ['回収', '#00ffcc'], ['機密', '#ff3355']],
+    },
+    {
+        id: 3, name: "DATA HEIST", jp: "データ強奪", codename: "OP-SPIKE", theme: 'ruins',
         objective: 'hack', waves: 99,
-        fog: '#0a160e', fogDensity: 0.014, ground: '#121d16', accent: '#00ff88',
-        enemyPool: ['scout', 'drone', 'soldier'],
-        brief: "Infiltrate the data vault. Data-Spike every security terminal while surviving the garrison.",
+        sky: '#cdd6cf', fog: '#aebfb0', fogDensity: 0.013, ground: '#2f3a2c', accent: '#00ff88',
+        enemyPool: ['drone', 'soldier'],
+        brief: "Infiltrate the overgrown vault. Data-Spike every security terminal while surviving the garrison.",
         signs: [['データ', '#00ff88'], ['アクセス', '#00ffcc'], ['機密', '#ff3355']],
     },
     {
-        id: 4, name: "CRIMSON GARRISON", jp: "紅の駐屯地", codename: "OP-IRON", theme: 'neon',
+        id: 4, name: "CRIMSON GARRISON", jp: "紅の駐屯地", codename: "OP-IRON", theme: 'ruins',
         objective: 'eliminate', quota: 22, waves: 99,
-        fog: '#160c08', fogDensity: 0.016, ground: '#241712', accent: '#ff9500',
+        sky: '#d2cdc4', fog: '#bdb6a6', fogDensity: 0.014, ground: '#3a3528', accent: '#ff9500',
         enemyPool: ['drone', 'soldier', 'elite'],
-        brief: "The garrison is mobilizing armoured infantry. Eliminate 22 hostiles to break their line.",
+        brief: "The garrison is mobilizing armoured infantry through the ruins. Eliminate 22 hostiles to break their line.",
         signs: [['駐屯地', '#ff9500'], ['危険', '#ff3355'], ['兵器', '#ffcc00']],
     },
     {
-        id: 5, name: "CRIMSON SPIRE", jp: "紅の尖塔", codename: "OP-OMEGA", theme: 'neon',
-        objective: 'boss', waves: 1,
-        fog: '#100614', fogDensity: 0.018, ground: '#1a1020', accent: '#ff00aa',
+        id: 5, name: "CRIMSON SPIRE", jp: "紅の尖塔", codename: "OP-OMEGA", theme: 'ruins',
+        objective: 'boss', waves: 1, bigMap: true,
+        sky: '#ccc6d2', fog: '#b3acc0', fogDensity: 0.015, ground: '#33304a', accent: '#ff00aa',
         enemyPool: ['soldier', 'elite'],
-        brief: "Reach the spire core and destroy the OMEGA war-mech. End the breach.",
+        brief: "Reach the spire at the heart of the ruins and destroy the OMEGA war-mech. End the breach.",
         signs: [['オメガ', '#ff00aa'], ['警告', '#ff2266'], ['核', '#ff5500']],
     },
 ];
+
+// ---- Collectibles ---------------------------------------------------
+// stored = goes into the inventory; usable = can be triggered by a key.
+HELA.COLLECTIBLES = {
+    datacache: { name: 'DATA-CACHE', glow: '#00f3ff', icon: '◈', mission: true },
+    medkit:    { name: 'MEDKIT',    glow: '#ff4455', icon: '✚', stored: true, use: 'heal', key: 'h' },
+    grenade:   { name: 'GRENADE',   glow: '#ff9500', icon: '✸', stored: true, use: 'throw', key: 'g' },
+    cell:      { name: 'NEON CELL', glow: '#cc66ff', icon: '⬢', score: 250 },
+    ammo:      { name: 'AMMO',      glow: '#00ff66', icon: '▮', ammo: 30 },
+};
 
 // ---- Secret codes ---------------------------------------------------
 HELA.CODES = {

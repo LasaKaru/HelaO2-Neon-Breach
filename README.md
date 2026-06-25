@@ -19,24 +19,30 @@ js/game.js      → Babylon engine, worlds, weapons, AI, objectives, FX
 - **Settings** (persisted to `localStorage`): master & SFX volume, mouse sensitivity, invert-Y, and graphics toggles (bloom / SSAO / grain / screen-shake)
 - **Save / Continue**: unlocked missions, best score and completion are stored locally
 
-## Missions (5 levels, distinct objectives)
-| # | Mission | Theme | Objective |
-|---|---------|-------|-----------|
-| 01 | VERDANT | Bright forest | Survive 8 waves of the infected |
-| 02 | NEON BREACH | Neon city | Survive 3 escalating waves |
-| 03 | DATA HEIST | Neon city | Data-Spike every security terminal |
-| 04 | CRIMSON GARRISON | Neon city | Eliminate 22 hostiles |
-| 05 | CRIMSON SPIRE | Neon city | Destroy the OMEGA war-mech (boss) |
+## Overgrown neon ruins
+Every mission shares one world: a **neon city reclaimed by nature** — misty daylight over mossy,
+cracked concrete with **trees and grass growing everywhere**, hanging vines, rubble boulders and
+drifting leaves, while the **neon signage** (ヘラ02 / ゲームセンター / HelaO2) still glows through the
+haze. Big open maps (up to ~450 m), GPU thin-instanced grass (~4,200 blades), wind-swayed foliage,
+and a clarity pass (much lighter fog, minimal chromatic aberration/grain, brighter exposure + FXAA)
+so it reads clearly. Layouts jitter run-to-run for variety.
 
-Each level is its own themed world — its own sky/fog, ground, props and enemy pool.
+## Missions (5 levels + Random Op)
+| # | Mission | Objective |
+|---|---------|-----------|
+| 01 | OVERGROWN PLAZA | Survive 5 waves |
+| 02 | SALVAGE RUN | Recover 6 data-caches (collect) |
+| 03 | DATA HEIST | Data-Spike every terminal |
+| 04 | CRIMSON GARRISON | Eliminate 22 hostiles |
+| 05 | CRIMSON SPIRE | Destroy the OMEGA war-mech (boss) |
 
-### VERDANT — the forest survival map
-A **large open playground** (big bounds, ~400 m ground) rendered **bright and clear** in daylight:
-low-poly **cone trees** with wind-swayed foliage, a dense **grass field** (thousands of GPU thin-instances),
-scattered **rocks**, **dirt roads**, drifting pollen motes, and a soft sun — with **human-like zombie**
-enemies (walkers, fast runners, heavy lurkers) that melee you. The previous "dusty/blurry" haze has been
-dialled right back across the whole game (much lighter fog, minimal chromatic aberration & grain, brighter
-exposure, FXAA) so the action reads clearly.
+**RANDOM OP** — a procedurally generated mission each time: random objective, fog tint, map size,
+tree density, enemy pool and loot. Reachable from the landing page and main menu.
+
+## Collectibles & inventory
+Find and grab loot scattered through the ruins (glowing pickups, cache pings on the minimap):
+**data-caches** (mission objective), **medkits** (`H` to heal +50), **grenades** (`G` to throw — AoE),
+**neon cells** (score) and **ammo**. Held items show in an on-screen **inventory** panel with counts.
 
 ## Combat & systems
 - **4 weapons** with independent ammo, switchable with `1-4` / `Q`:

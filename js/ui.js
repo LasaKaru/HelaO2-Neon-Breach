@@ -96,12 +96,14 @@ HELA.UI = {
     bindMenu() {
         const $ = (id) => document.getElementById(id);
         $('btn-play').onclick = () => this.startNew();
+        $('btn-landing-random').onclick = () => this.startRandomOp();
         $('btn-landing-missions').onclick = () => this.openMissions();
         $('btn-landing-settings').onclick = () => this.show('settings');
         $('btn-menu').onclick = () => this.show('menu');
 
         $('m-new').onclick = () => this.startNew();
         $('m-continue').onclick = () => this.continueGame();
+        $('m-random').onclick = () => this.startRandomOp();
         $('m-missions').onclick = () => this.openMissions();
         $('m-settings').onclick = () => this.show('settings');
         $('m-codes').onclick = () => this.show('codes');
@@ -162,10 +164,16 @@ HELA.UI = {
     objectiveText(lv) {
         switch (lv.objective) {
             case 'survive': return 'Survive ' + lv.waves + ' waves';
+            case 'collect': return 'Recover ' + lv.collectTarget + ' data-caches';
             case 'hack': return 'Data-Spike all terminals';
             case 'eliminate': return 'Eliminate ' + lv.quota + ' hostiles';
             case 'boss': return 'Destroy the OMEGA war-mech';
         } return '—';
+    },
+    startRandomOp() {
+        this.show('playing');
+        HELA.Game.applyCodes(this.activeCodes);
+        HELA.Game.startRandom();
     },
 
     showBrief(levelId) {
@@ -195,10 +203,10 @@ HELA.UI = {
 
     // ---- callbacks from the engine ----
     onLevelComplete(stats) {
-        HELA.Save.recordComplete(HELA.Game.currentLevelId, stats.score, stats.kills);
-        this.refreshContinueButton();
+        const isRandom = (typeof HELA.Game.currentLevelId !== 'number');
+        if (!isRandom) { HELA.Save.recordComplete(HELA.Game.currentLevelId, stats.score, stats.kills); this.refreshContinueButton(); }
         const $ = (id) => document.getElementById(id);
-        const hasNext = !!HELA.LEVELS.find(l => l.id === HELA.Game.currentLevelId + 1);
+        const hasNext = !isRandom && !!HELA.LEVELS.find(l => l.id === HELA.Game.currentLevelId + 1);
         $('c-title').textContent = 'MISSION CLEARED';
         $('c-stats').innerHTML = 'SCORE <b>' + stats.score.toLocaleString() + '</b> &nbsp; • &nbsp; KILLS <b>' + stats.kills + '</b> &nbsp; • &nbsp; WAVE <b>' + stats.wave + '</b>';
         $('c-next').style.display = hasNext ? 'inline-block' : 'none';
