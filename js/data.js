@@ -5,7 +5,7 @@
 // =====================================================================
 window.HELA = window.HELA || {};
 
-HELA.VERSION = "0.7.2";
+HELA.VERSION = "0.8.0";
 
 // ---- Studio / company identity (single-word HelaO2) ----
 HELA.STUDIO  = "HelaO2 Studio";
@@ -99,7 +99,34 @@ HELA.COLLECTIBLES = {
     ammo:      { name: 'AMMO',      glow: '#00ff66', icon: '▮', ammo: 30 },
 };
 
-// ---- Secret codes ---------------------------------------------------
+// ---- Augments (unlockable passive loadout) -------------------------
+// effect keys are read by the engine at mission start.
+HELA.AUGMENT_SLOTS = 3;
+HELA.AUGMENTS = {
+    vitality:  { name: 'VITALITY CORE',    desc: '+40 max integrity',     cost: 700,  icon: '❤', effect: { maxHealth: 40 } },
+    reactive:  { name: 'REACTIVE PLATING', desc: '+50 max shield',        cost: 700,  icon: '🛡', effect: { maxShield: 50 } },
+    overclock: { name: 'OVERCLOCK',        desc: '+18% move speed',       cost: 900,  icon: '»',  effect: { speedMult: 1.18 } },
+    rapid:     { name: 'RAPID CYCLER',     desc: '−25% reload time',      cost: 900,  icon: '↻',  effect: { reloadMult: 0.75 } },
+    phase:     { name: 'PHASE DRIVE',      desc: '−40% dash cooldown',    cost: 800,  icon: '⇶',  effect: { dashCdMult: 0.6 } },
+    scavenger: { name: 'SCAVENGER',        desc: '+60% ammo from pickups',cost: 650,  icon: '▮',  effect: { ammoMult: 1.6 } },
+    leech:     { name: 'NANO-LEECH',       desc: 'Heal 5 HP per kill',    cost: 1200, icon: '✚',  effect: { lifesteal: 5 } },
+    marksman:  { name: 'MARKSMAN DSP',     desc: '+15% weapon damage',    cost: 1500, icon: '◎',  effect: { dmgMult: 1.15 } },
+    fortune:   { name: 'FORTUNE CHIP',     desc: '+25% credits & score',  cost: 1100, icon: '✦',  effect: { rewardMult: 1.25 } },
+};
+
+// ---- Daily challenges (3 roll per day, by date seed) ----------------
+HELA.CHALLENGE_POOL = [
+    { id: 'kills40',   desc: 'Neutralize 40 hostiles',     metric: 'kills',    target: 40,    reward: 400 },
+    { id: 'kills80',   desc: 'Neutralize 80 hostiles',     metric: 'kills',    target: 80,    reward: 700 },
+    { id: 'waves8',    desc: 'Clear 8 waves',              metric: 'waves',    target: 8,     reward: 350 },
+    { id: 'caches6',   desc: 'Recover 6 data-caches',      metric: 'caches',   target: 6,     reward: 450 },
+    { id: 'missions2', desc: 'Complete 2 missions',        metric: 'missions', target: 2,     reward: 600 },
+    { id: 'score15k',  desc: 'Score 15,000 in one run',    metric: 'bestrun',  target: 15000, reward: 500 },
+    { id: 'nades5',    desc: 'Land 5 grenade kills',       metric: 'nadekills',target: 5,     reward: 450 },
+    { id: 'hack3',     desc: 'Tamper 3 terminals',         metric: 'hacks',    target: 3,     reward: 400 },
+];
+
+
 HELA.CODES = {
     'GODMODE':   { effect: 'god',      label: 'INVULNERABILITY ENGAGED' },
     'FULLMETAL': { effect: 'infammo',  label: 'INFINITE AMMUNITION' },

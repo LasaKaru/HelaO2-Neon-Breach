@@ -49,6 +49,7 @@
             <div class="menu-item" id="m-new"><span>NEW PROTOCOL <div class="sub">Start from Mission 01</div></span><span class="arrow">▶</span></div>
             <div class="menu-item" id="m-continue"><span>CONTINUE <div class="sub">No saved protocol</div></span><span class="arrow">▶</span></div>
             <div class="menu-item" id="m-random"><span>RANDOM OP <div class="sub">Procedural mission & loot</div></span><span class="arrow">⚄</span></div>
+            <div class="menu-item" id="m-armory"><span>ARMORY <div class="sub">Augments · challenges · profile</div></span><span class="arrow">▣</span></div>
             <div class="menu-item" id="m-missions"><span>MISSION SELECT <div class="sub">Choose a deployment</div></span><span class="arrow">▶</span></div>
             <div class="menu-item" id="m-settings"><span>SETTINGS <div class="sub">Audio · controls · graphics</div></span><span class="arrow">▶</span></div>
             <div class="menu-item" id="m-codes"><span>SECRET CODES <div class="sub">Enter cheat protocols</div></span><span class="arrow">▶</span></div>
@@ -62,6 +63,23 @@
         <div class="panel">
             <div class="section-head">MISSION SELECT</div>
             <div id="missions-list"></div>
+            <div class="btn-row"><button class="btn ghost" data-back="menu">◀ BACK</button></div>
+        </div>
+    </section>
+
+    <!-- ============ ARMORY ============ -->
+    <section class="screen" data-screen="armory" id="armory">
+        <div class="panel">
+            <div class="section-head">ARMORY</div>
+            <div id="arm-profile">
+                <div class="arm-stat">OPERATIVE LEVEL <b id="arm-level">1</b></div>
+                <div class="arm-xp"><div class="arm-xpbar-wrap"><div id="arm-xpbar"></div></div><span id="arm-xptext"></span></div>
+                <div class="arm-stat">NEON CREDITS <b id="arm-credits" style="color:#cc66ff;">0</b></div>
+            </div>
+            <div class="arm-sub">DAILY CHALLENGES <span style="color:#567;font-size:11px;">(reset daily)</span></div>
+            <div id="arm-challenges"></div>
+            <div class="arm-sub">AUGMENTS <span style="color:#567;font-size:11px;">— equipped <b id="arm-slots">0 / 3</b></span></div>
+            <div id="arm-augments"></div>
             <div class="btn-row"><button class="btn ghost" data-back="menu">◀ BACK</button></div>
         </div>
     </section>

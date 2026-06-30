@@ -88,6 +88,34 @@ b { color: #fff; }
 .mc-obj { color: var(--cyan); font-size: 11px; margin-top: 4px; letter-spacing: 1px; }
 .mc-status { margin-left: auto; color: var(--cyan); font-size: 12px; white-space: nowrap; }
 
+/* ---------- armory ---------- */
+#armory .panel { max-width: 760px; align-items: stretch; max-height: 92vh; overflow-y: auto; }
+#arm-profile { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; background: var(--panel); border: 1px solid rgba(0,243,255,0.2); padding: 14px 18px; margin-bottom: 14px; }
+.arm-stat { letter-spacing: 1px; color: #9ab; }
+.arm-stat b { color: var(--cyan); font-size: 20px; margin-left: 6px; }
+.arm-xp { flex: 1; min-width: 200px; }
+.arm-xpbar-wrap { height: 8px; background: #11151f; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
+#arm-xpbar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--pink)); transition: width 0.3s; }
+.arm-xp span { font-size: 11px; color: #678; }
+.arm-sub { font-family: 'Orbitron'; letter-spacing: 3px; color: #fff; margin: 14px 0 8px; font-size: 13px; }
+.chal-row { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid rgba(0,243,255,0.15); padding: 10px 14px; margin-bottom: 8px; }
+.chal-main { flex: 1; }
+.chal-desc { color: #cde; letter-spacing: 1px; font-size: 13px; }
+.chal-bar { height: 6px; background: #11151f; border-radius: 3px; overflow: hidden; margin: 6px 0 3px; }
+.chal-fill { height: 100%; background: var(--green); }
+.chal-prog { font-size: 11px; color: #678; }
+.chal-row .btn { padding: 8px 16px; font-size: 13px; min-width: 96px; }
+.chal-row .btn:disabled { opacity: 0.4; cursor: default; }
+#arm-augments { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+.aug-card { background: var(--panel); border: 1px solid rgba(0,243,255,0.18); border-radius: 6px; padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.aug-card.equipped { border-color: var(--pink); box-shadow: 0 0 14px rgba(255,0,170,0.25); }
+.aug-card.locked { opacity: 0.7; }
+.aug-ic { font-size: 22px; color: var(--cyan); }
+.aug-name { font-weight: 700; letter-spacing: 1px; font-size: 12px; color: #fff; }
+.aug-desc { font-size: 11px; color: #89a; min-height: 28px; line-height: 1.4; }
+.aug-card .btn { padding: 6px 12px; font-size: 11px; margin-top: 4px; width: 100%; }
+.aug-card .btn:disabled { opacity: 0.4; cursor: default; }
+
 /* ---------- settings ---------- */
 .set-row { display: flex; align-items: center; justify-content: space-between; background: var(--panel); border: 1px solid rgba(0,243,255,0.15); padding: 12px 18px; margin-bottom: 8px; }
 .set-row label { letter-spacing: 1px; color: #bcd; }

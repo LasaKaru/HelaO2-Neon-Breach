@@ -76,6 +76,7 @@ window.HELA = window.HELA || {};
         codes: {}, bossRef: null, mapOpen: false, frame: 0, fpsTime: 0,
         bounds: 70, groundY: 3.55, theme: 'neon',
         fpv: true, vmKick: 0, vmBob: 0,
+        aug: {}, maxHealth: 100, maxShield: 100, inGrenade: false,
     };
     HELA.Game = { currentLevelId: 1 };
 
@@ -154,7 +155,12 @@ window.HELA = window.HELA || {};
             inventory: { datacache: 0, medkit: 0, grenade: 0, cell: 0, ammo: 0 },
             yaw: 0, pitch: 0.18, dashVel: V3.Zero(), reloading: false, shake: 0,
         });
-        if (S.codes.god) S.health = 100;
+        // equipped augments
+        S.aug = (HELA.Save && HELA.Save.equippedEffects) ? HELA.Save.equippedEffects() : {};
+        S.maxHealth = 100 + (S.aug.maxHealth || 0);
+        S.maxShield = 100 + (S.aug.maxShield || 0);
+        S.health = S.maxHealth; S.shield = S.maxShield;
+        if (S.codes.god) S.health = S.maxHealth;
 
         // weapons: ensure starting loadout
         if (!S.weaponState.spike) for (const id of HELA.WEAPON_ORDER) { const w = HELA.WEAPONS[id]; S.weaponState[id] = { mag: w.mag, reserve: w.infinite ? Infinity : w.reserve }; }
@@ -571,18 +577,18 @@ window.HELA = window.HELA || {};
     }
     function applyCollectible(ctype) {
         const def = HELA.COLLECTIBLES[ctype]; Audio.pickup();
-        if (def.mission) { S.collected++; S.inventory.datacache++; status(def.name + ' RECOVERED — ' + S.collected + '/' + S.collectTarget, 1600); checkObjective(); }
+        if (def.mission) { S.collected++; S.inventory.datacache++; if (HELA.Save) HELA.Save.track('caches', 1); status(def.name + ' RECOVERED — ' + S.collected + '/' + S.collectTarget, 1600); checkObjective(); }
         else if (def.stored) { S.inventory[ctype]++; status('PICKED UP ' + def.name + '  (' + S.inventory[ctype] + ')', 1300); }
         else if (def.score) { S.score += def.score; S.inventory.cell++; status('+' + def.score + ' NEON CELL', 1100); }
-        else if (def.ammo) { const a = curAmmo(); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + def.ammo, 320); status('+' + def.ammo + ' AMMO', 1000); }
+        else if (def.ammo) { const a = curAmmo(); const amt = Math.round(def.ammo * (S.aug.ammoMult || 1)); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + amt, 360); status('+' + amt + ' AMMO', 1000); }
         updateInventoryHUD(); updateHUD();
     }
     function useItem(ctype) {
         const def = HELA.COLLECTIBLES[ctype];
         if (!def || !S.inventory[ctype]) { status('NO ' + (def ? def.name : 'ITEM'), 1000); return; }
         if (def.use === 'heal') {
-            if (S.health >= 100) { status('INTEGRITY FULL', 1000); return; }
-            S.inventory.medkit--; S.health = Math.min(100, S.health + 50); Audio.pickup(); status('MEDKIT USED — +50 INTEGRITY', 1400);
+            if (S.health >= S.maxHealth) { status('INTEGRITY FULL', 1000); return; }
+            S.inventory.medkit--; S.health = Math.min(S.maxHealth, S.health + 50); Audio.pickup(); status('MEDKIT USED — +50 INTEGRITY', 1400);
         } else if (def.use === 'throw') {
             S.inventory.grenade--; throwGrenade(); Audio.swap();
         }
@@ -607,7 +613,9 @@ window.HELA = window.HELA || {};
         flash(pos, '#ffaa44', 6, 240); if (HELA.Settings.get('shake')) addShake(0.5);
         Audio.kill(panFor(pos));
         for (let i = 0; i < 24; i++) { const s = BABYLON.MeshBuilder.CreateBox('frag', { size: 0.2 }, S.scene); s.material = flatMat('frag', '#0a0a0a', '#ffcc66', 1.2); s.position.copyFrom(pos); s.isPickable = false; particles.push({ mesh: s, vel: new V3((Math.random() - 0.5) * 24, Math.random() * 16 + 4, (Math.random() - 0.5) * 24), life: 700, born: performance.now() }); }
+        S.inGrenade = true;
         for (const e of enemies.slice()) { if (!e.metadata.alive) continue; const d = V3.Distance(e.position, pos); if (d < 9) damageEnemy(e, Math.round(160 * (1 - d / 9)), e.position.add(new V3(0, 1, 0))); }
+        S.inGrenade = false;
     }
     function addBox(name, s, pos, hex, collide) {
         const m = BABYLON.MeshBuilder.CreateBox(name, { width: s.w, height: s.h, depth: s.d }, S.scene);
@@ -736,7 +744,7 @@ window.HELA = window.HELA || {};
     }
     function tamper(item) {
         if (item.hacked) return;
-        item.hacked = true; S.terminalsHacked++; Audio.hack();
+        item.hacked = true; S.terminalsHacked++; Audio.hack(); if (HELA.Save) HELA.Save.track('hacks', 1);
         item.screen.getContext().clearRect(0, 0, 256, 192); drawTermHacked(item.screen.getContext(), 256, 192); item.screen.update();
         item.mesh.material.emissiveColor = C.FromHexString('#00ffcc').scale(0.4);
         if (domeShieldUp) { domeShieldUp = false; domeMesh.material.alpha = 0.06; if (domeMesh.metadata.core) domeMesh.metadata.core.material.alpha = 0.04; status('DATA-SPIKE DEPLOYED — SHIELD BYPASSED', 3200); }
@@ -934,6 +942,7 @@ window.HELA = window.HELA || {};
         if (!S.running || S.objectiveDone) return;
         if (S.mode === 'survive') {
             if (!S.betweenWaves && !enemies.some(e => e.metadata.alive)) {
+                if (HELA.Save) HELA.Save.track('waves', 1);
                 if (S.wave >= S.level.waves) { completeObjective(); return; }
                 S.betweenWaves = true;
                 const reward = 20 + S.wave * 4; S.weaponState[S.curWeapon] && (S.weaponState[S.curWeapon].reserve = (S.weaponState[S.curWeapon].reserve === Infinity ? Infinity : Math.min(S.weaponState[S.curWeapon].reserve + reward, 300)));
@@ -999,11 +1008,11 @@ window.HELA = window.HELA || {};
         setTimeout(() => {
             const need = w.mag - a.mag, take = Math.min(need, a.reserve);
             a.mag += take; if (a.reserve !== Infinity) a.reserve -= take; S.reloading = false; updateHUD();
-        }, 600);
+        }, 600 * (S.aug.reloadMult || 1));
     }
     function dash() {
         const now = performance.now();
-        if (now - S.lastDash < CFG.dashCooldown || !S.running || S.paused) return;
+        if (now - S.lastDash < CFG.dashCooldown * (S.aug.dashCdMult || 1) || !S.running || S.paused) return;
         S.lastDash = now; S.dashVel = forwardVec().scale(CFG.dashImpulse * (S.codes.lowgrav ? 1.3 : 1)); Audio.dash();
     }
     function shoot() {
@@ -1018,12 +1027,13 @@ window.HELA = window.HELA || {};
         const origin = camera.position.clone();
         const visualStart = S.fpv ? (vmMuzzle ? vmMuzzle.getAbsolutePosition() : origin) : muzzle.getAbsolutePosition();
         flash(visualStart, w.tracer, 3.0, 70);
+        const dmg = w.dmg * (S.aug.dmgMult || 1);
         for (let p = 0; p < w.pellets; p++) {
             const dir = aimVec(w.spread);
             const ray = new BABYLON.Ray(origin, dir, 140);
             const hit = S.scene.pickWithRay(ray, (m) => m.isPickable && m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive);
             let end;
-            if (hit && hit.hit) { end = hit.pickedPoint; damageEnemy(hit.pickedMesh.metadata.enemy, w.dmg, end); }
+            if (hit && hit.hit) { end = hit.pickedPoint; damageEnemy(hit.pickedMesh.metadata.enemy, dmg, end); }
             else { const wh = S.scene.pickWithRay(ray, (m) => m.isPickable); end = (wh && wh.hit) ? wh.pickedPoint : origin.add(dir.scale(100)); if (p === 0) impact(end); }
             if (p % 2 === 0) tracer(visualStart, end, w.tracer);
         }
@@ -1055,6 +1065,8 @@ window.HELA = window.HELA || {};
         e.dispose();
         const idx = enemies.indexOf(e); if (idx >= 0) enemies.splice(idx, 1);
         S.kills++;
+        if (HELA.Save) { HELA.Save.track('kills', 1); if (S.inGrenade) HELA.Save.track('nadekills', 1); }
+        if (S.aug.lifesteal && S.health > 0) S.health = Math.min(S.maxHealth, S.health + S.aug.lifesteal);
         const now = performance.now();
         if (now - S.lastKill < CFG.comboWindow) S.combo++; else S.combo = 1; S.lastKill = now;
         const mult = Math.min(S.combo, 8); S.score += (points * 100) * mult;
@@ -1111,7 +1123,7 @@ window.HELA = window.HELA || {};
         const fwd = forwardVec(), right = rightVec();
         let mx = 0, mz = 0;
         if (S.keys['w']) mz += 1; if (S.keys['s']) mz -= 1; if (S.keys['d']) mx += 1; if (S.keys['a']) mx -= 1;
-        let speed = CFG.moveSpeed * (S.keys['shift'] ? CFG.sprintMult : 1) * (S.codes.haste ? 1.6 : 1);
+        let speed = CFG.moveSpeed * (S.keys['shift'] ? CFG.sprintMult : 1) * (S.codes.haste ? 1.6 : 1) * (S.aug.speedMult || 1);
         let move = V3.Zero();
         if (mx || mz) { move = fwd.scale(mz).add(right.scale(mx)); move.y = 0; move.normalize().scaleInPlace(speed * dt); }
         if (S.dashVel.lengthSquared() > 0.01) { move.addInPlace(S.dashVel.scale(dt)); S.dashVel.scaleInPlace(Math.pow(0.0001, dt)); if (S.dashVel.length() < 0.5) S.dashVel = V3.Zero(); }
@@ -1231,9 +1243,9 @@ window.HELA = window.HELA || {};
         }
     }
     function applyPickup(type) {
-        if (type === 'ammo') { const a = curAmmo(); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + 24, 300); status('+24 AMMO', 900); }
-        else if (type === 'health') { S.health = Math.min(S.health + 35, 100); status('+35 INTEGRITY', 900); }
-        else if (type === 'shield') { S.shield = Math.min(S.shield + 40, 100); status('+40 SHIELD', 900); }
+        if (type === 'ammo') { const a = curAmmo(); const amt = Math.round(24 * (S.aug.ammoMult || 1)); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + amt, 360); status('+' + amt + ' AMMO', 900); }
+        else if (type === 'health') { S.health = Math.min(S.health + 35, S.maxHealth); status('+35 INTEGRITY', 900); }
+        else if (type === 'shield') { S.shield = Math.min(S.shield + 40, S.maxShield); status('+40 SHIELD', 900); }
         updateHUD();
     }
     function updateDome(t) { if (domeMesh) { domeMesh.rotation.y = t * 0.1; if (domeMesh.metadata.core) domeMesh.metadata.core.rotation.y = -t * 0.15; } if (S.scene) S.scene.fogDensity = S.level.fogDensity + Math.sin(t * 0.4) * 0.0018; }
@@ -1261,8 +1273,8 @@ window.HELA = window.HELA || {};
 
     // ---- HUD ----
     function updateHUD() {
-        $('health-value').textContent = Math.floor(S.health); $('health-bar').style.width = S.health + '%';
-        $('shield-value').textContent = Math.floor(S.shield); $('shield-bar').style.width = S.shield + '%';
+        $('health-value').textContent = Math.floor(S.health); $('health-bar').style.width = (S.health / S.maxHealth * 100) + '%';
+        $('shield-value').textContent = Math.floor(S.shield); $('shield-bar').style.width = (S.shield / S.maxShield * 100) + '%';
         const w = curW(), a = curAmmo();
         $('weapon-name').textContent = w.name;
         const av = $('ammo-value'); av.textContent = S.codes.infammo ? '∞' : a.mag; av.classList.toggle('low', !S.codes.infammo && a.mag <= Math.ceil(w.mag * 0.25));
