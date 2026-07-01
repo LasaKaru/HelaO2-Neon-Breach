@@ -35,7 +35,7 @@ HELA.Save = {
         const d = HELA.Storage.loadSave() || {};
         this.data = Object.assign({
             unlocked: 1, bestScore: 0, lastLevel: 1, totalKills: 0, completed: [],
-            level: 1, xp: 0, credits: 0,
+            level: 1, xp: 0, credits: 0, ability: 'overdrive',
             augmentsOwned: [], augmentsEquipped: [],
             challenges: { date: '', list: [] },
             lifetime: { kills: 0, waves: 0, caches: 0, missions: 0, nadekills: 0, hacks: 0 },
@@ -120,6 +120,7 @@ HELA.Save = {
         else { if (eq.length >= HELA.AUGMENT_SLOTS) return; eq.push(id); }
         this.persist();
     },
+    setAbility(id) { if (HELA.ABILITIES[id]) { this.data.ability = id; this.persist(); } },
     equippedEffects() {
         const e = {};
         for (const id of this.data.augmentsEquipped) { const a = HELA.AUGMENTS[id]; if (!a) continue; for (const k in a.effect) e[k] = (k.endsWith('Mult')) ? (e[k] || 1) * a.effect[k] : (e[k] || 0) + a.effect[k]; }
@@ -282,6 +283,17 @@ HELA.UI = {
             cw.appendChild(row);
         }
         cw.querySelectorAll('[data-claim]').forEach(b => b.onclick = () => { const r = HELA.Save.claimChallenge(b.dataset.claim); if (r) this.toast('+' + r + ' CREDITS & XP'); this.renderArmory(); });
+
+        // active ability (pick one)
+        const abw = $('arm-abilities'); abw.innerHTML = '';
+        for (const id of HELA.ABILITY_ORDER) {
+            const a = HELA.ABILITIES[id]; const sel = S.ability === id;
+            const card = document.createElement('div'); card.className = 'aug-card' + (sel ? ' equipped' : '');
+            card.innerHTML = '<div class="aug-ic">' + a.icon + '</div><div class="aug-name">' + a.name + '</div><div class="aug-desc">' + a.desc + '</div>' +
+                '<button class="btn ' + (sel ? 'primary' : 'ghost') + '" data-ability="' + id + '">' + (sel ? 'SELECTED' : 'SELECT') + '</button>';
+            abw.appendChild(card);
+        }
+        abw.querySelectorAll('[data-ability]').forEach(b => b.onclick = () => { HELA.Save.setAbility(b.dataset.ability); this.renderArmory(); });
 
         // augments
         const aw = $('arm-augments'); aw.innerHTML = '';

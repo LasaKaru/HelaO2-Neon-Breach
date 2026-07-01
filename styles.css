@@ -197,6 +197,23 @@ b { color: #fff; }
 #boss-track { height: 12px; background: rgba(0,0,0,0.6); border: 1px solid #4a1020; overflow: hidden; }
 #boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff2266, #ff6699); box-shadow: 0 0 12px #ff2266; transition: width 0.2s; }
 
+#ability-hud { position: absolute; bottom: 150px; left: 24px; display: flex; flex-direction: column; align-items: center; gap: 5px; user-select: none; }
+#ability-ring { position: relative; width: 58px; height: 58px; }
+#ability-ring svg { width: 58px; height: 58px; transform: rotate(-90deg); }
+#ability-ring circle { fill: none; stroke-width: 3.5; }
+#ability-ring .ab-track { stroke: rgba(0,243,255,0.14); }
+#ability-arc { stroke: #446074; stroke-dasharray: 119.38; stroke-dashoffset: 119.38; stroke-linecap: round; transition: stroke-dashoffset 0.12s linear; }
+#ability-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #6c7f92; text-shadow: none; }
+#ability-key { font-size: 9px; letter-spacing: 2px; color: rgba(0,243,255,0.45); }
+#ability-key kbd { background: #1a2130; padding: 1px 6px; border-radius: 3px; border: 1px solid #3a4456; color: #cde; margin-right: 3px; }
+#ability-hud.ready #ability-arc { stroke: var(--cyan); filter: drop-shadow(0 0 5px var(--cyan)); }
+#ability-hud.ready #ability-icon { color: #fff; text-shadow: 0 0 12px var(--cyan); }
+#ability-hud.ready #ability-key { color: var(--cyan); }
+#ability-hud.active #ability-ring { animation: ab-pulse 0.7s ease-in-out infinite; }
+#ability-hud.active #ability-arc { stroke: var(--pink); filter: drop-shadow(0 0 8px var(--pink)); }
+#ability-hud.active #ability-icon { color: #fff; text-shadow: 0 0 16px var(--pink); }
+@keyframes ab-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 26px; height: 26px; }
 #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(0,243,255,0.9); box-shadow: 0 0 6px var(--cyan); }
 #crosshair::before { top: 50%; left: 0; width: 100%; height: 1px; transform: translateY(-50%); }

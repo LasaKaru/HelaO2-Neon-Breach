@@ -78,6 +78,8 @@
             </div>
             <div class="arm-sub">DAILY CHALLENGES <span style="color:#567;font-size:11px;">(reset daily)</span></div>
             <div id="arm-challenges"></div>
+            <div class="arm-sub">ACTIVE ABILITY <span style="color:#567;font-size:11px;">— deploy in-mission with <b>F</b></span></div>
+            <div id="arm-abilities"></div>
             <div class="arm-sub">AUGMENTS <span style="color:#567;font-size:11px;">— equipped <b id="arm-slots">0 / 3</b></span></div>
             <div id="arm-augments"></div>
             <div class="btn-row"><button class="btn ghost" data-back="menu">◀ BACK</button></div>
@@ -215,6 +217,14 @@
             <div id="boss-track"><div id="boss-fill"></div></div>
         </div>
 
+        <div id="ability-hud" class="ready">
+            <div id="ability-ring">
+                <svg viewBox="0 0 44 44"><circle class="ab-track" cx="22" cy="22" r="19"/><circle id="ability-arc" cx="22" cy="22" r="19"/></svg>
+                <div id="ability-icon">⚡</div>
+            </div>
+            <div id="ability-key"><kbd>F</kbd> ABILITY</div>
+        </div>
+
         <div id="crosshair"></div>
         <div id="hitmarker"></div>
         <div id="wave-announce"></div>
@@ -225,7 +235,7 @@
             <strong>CONTROLS</strong><br>
             <kbd>WASD</kbd> Move · <kbd>MOUSE</kbd> Aim · <kbd>SHIFT</kbd> Sprint · <kbd>SPACE</kbd> Dash<br>
             <kbd>LMB</kbd> Fire · <kbd>R</kbd> Reload · <kbd>1-4/Q</kbd> Weapon · <kbd>E</kbd> Data-Spike<br>
-            <kbd>H</kbd> Medkit · <kbd>G</kbd> Grenade · <kbd>TAB</kbd> Map · <kbd>V</kbd> View · <kbd>P</kbd> Pause · <kbd>M</kbd> Mute
+            <kbd>H</kbd> Medkit · <kbd>G</kbd> Grenade · <kbd>F</kbd> Ability · <kbd>TAB</kbd> Map · <kbd>V</kbd> View · <kbd>P</kbd> Pause · <kbd>M</kbd> Mute
         </div>
         <div id="fps"></div>
         <div id="mute-ind"></div>

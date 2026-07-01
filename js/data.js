@@ -5,7 +5,7 @@
 // =====================================================================
 window.HELA = window.HELA || {};
 
-HELA.VERSION = "0.8.0";
+HELA.VERSION = "0.9.0";
 
 // ---- Studio / company identity (single-word HelaO2) ----
 HELA.STUDIO  = "HelaO2 Studio";
@@ -113,6 +113,15 @@ HELA.AUGMENTS = {
     marksman:  { name: 'MARKSMAN DSP',     desc: '+15% weapon damage',    cost: 1500, icon: '◎',  effect: { dmgMult: 1.15 } },
     fortune:   { name: 'FORTUNE CHIP',     desc: '+25% credits & score',  cost: 1100, icon: '✦',  effect: { rewardMult: 1.25 } },
 };
+
+// ---- Active abilities (one equipped, fired with F, on cooldown) -----
+HELA.ABILITIES = {
+    overdrive: { name: 'OVERDRIVE',     desc: '5s: +40% fire rate & +25% damage', icon: '⚡', cooldown: 14000, duration: 5000 },
+    emp:       { name: 'EMP BURST',     desc: 'Stun all nearby hostiles for 3s',   icon: '◉', cooldown: 16000, duration: 3000, radius: 20 },
+    turret:    { name: 'AUTO-TURRET',   desc: 'Deploy a hijacked turret for 12s',  icon: '⊕', cooldown: 20000, duration: 12000 },
+    cloak:     { name: 'PHANTOM CLOAK', desc: '4.5s: enemies lose track of you',   icon: '◇', cooldown: 15000, duration: 4500 },
+};
+HELA.ABILITY_ORDER = ['overdrive', 'emp', 'turret', 'cloak'];
 
 // ---- Daily challenges (3 roll per day, by date seed) ----------------
 HELA.CHALLENGE_POOL = [

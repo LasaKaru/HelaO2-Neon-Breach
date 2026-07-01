@@ -77,6 +77,7 @@ window.HELA = window.HELA || {};
         bounds: 70, groundY: 3.55, theme: 'neon',
         fpv: true, vmKick: 0, vmBob: 0,
         aug: {}, maxHealth: 100, maxShield: 100, inGrenade: false,
+        ability: 'overdrive', abilityActive: false, abilityEnd: 0, abilityCdEnd: 0, cloaked: false, turretRef: null,
     };
     HELA.Game = { currentLevelId: 1 };
 
@@ -161,6 +162,9 @@ window.HELA = window.HELA || {};
         S.maxShield = 100 + (S.aug.maxShield || 0);
         S.health = S.maxHealth; S.shield = S.maxShield;
         if (S.codes.god) S.health = S.maxHealth;
+        // active ability (equipped in the Armory, fired with F)
+        S.ability = (HELA.Save && HELA.Save.data && HELA.ABILITIES[HELA.Save.data.ability]) ? HELA.Save.data.ability : 'overdrive';
+        S.abilityActive = false; S.abilityEnd = 0; S.abilityCdEnd = 0; S.cloaked = false; S.turretRef = null;
 
         // weapons: ensure starting loadout
         if (!S.weaponState.spike) for (const id of HELA.WEAPON_ORDER) { const w = HELA.WEAPONS[id]; S.weaponState[id] = { mag: w.mag, reserve: w.infinite ? Infinity : w.reserve }; }
@@ -171,7 +175,7 @@ window.HELA = window.HELA || {};
         initDirector();
         scatterCollectibles();
         Audio.resume();
-        updateHUD(); renderWeaponSlots(); updateInventoryHUD();
+        updateHUD(); renderWeaponSlots(); updateInventoryHUD(); updateAbilityHUD();
         status((S.isRandom ? 'RANDOM OP — ' : 'MISSION — ') + S.level.name, 3200);
         announce(S.level.name, S.level.jp);
     };
@@ -1017,7 +1021,8 @@ window.HELA = window.HELA || {};
     }
     function shoot() {
         const now = performance.now(), w = curW(), a = curAmmo();
-        if (now - S.lastShot < w.cooldown || S.reloading) return;
+        const overdrive = S.abilityActive && S.ability === 'overdrive';
+        if (now - S.lastShot < w.cooldown * (overdrive ? 0.714 : 1) || S.reloading) return;
         if (a.mag <= 0 && !S.codes.infammo) { reload(); return; }
         S.lastShot = now; if (!S.codes.infammo) a.mag--; updateHUD(); Audio.shoot(w.id);
         if (HELA.Settings.get('shake')) addShake(w.recoil);
@@ -1027,7 +1032,7 @@ window.HELA = window.HELA || {};
         const origin = camera.position.clone();
         const visualStart = S.fpv ? (vmMuzzle ? vmMuzzle.getAbsolutePosition() : origin) : muzzle.getAbsolutePosition();
         flash(visualStart, w.tracer, 3.0, 70);
-        const dmg = w.dmg * (S.aug.dmgMult || 1);
+        const dmg = w.dmg * (S.aug.dmgMult || 1) * (overdrive ? 1.25 : 1);
         for (let p = 0; p < w.pellets; p++) {
             const dir = aimVec(w.spread);
             const ray = new BABYLON.Ray(origin, dir, 140);
@@ -1049,7 +1054,7 @@ window.HELA = window.HELA || {};
     }
     function flashEnemy(e) {
         if (!e.metadata.eyes || !e.metadata.eyes.length) return;
-        e.metadata.eyes.forEach(eye => { const o = eye.material.emissiveColor.clone(); eye.material.emissiveColor = new C(1, 1, 1); setTimeout(() => { eye.material.emissiveColor = o; }, 100); });
+        e.metadata.eyes.forEach(eye => { if (!eye.material) return; const o = eye.material.emissiveColor.clone(); eye.material.emissiveColor = new C(1, 1, 1); setTimeout(() => { if (eye.material) eye.material.emissiveColor = o; }, 100); });
     }
     function destroyEnemy(e) {
         e.metadata.alive = false; const pos = e.position.clone(), pan = panFor(pos), points = e.metadata.points, isBoss = e.metadata.kind === 'boss';
@@ -1090,6 +1095,97 @@ window.HELA = window.HELA || {};
     function endGame() {
         S.over = true; S.running = false; document.exitPointerLock();
         if (HELA.UI && HELA.UI.onGameOver) HELA.UI.onGameOver({ score: S.score, kills: S.kills });
+    }
+
+    // =================================================================
+    //  ACTIVE ABILITIES  (equipped in Armory, fired with F)
+    // =================================================================
+    function activateAbility() {
+        if (!S.running || S.paused || S.over) return;
+        const now = performance.now(), def = HELA.ABILITIES[S.ability];
+        if (!def) return;
+        if (now < S.abilityCdEnd) { const left = Math.ceil((S.abilityCdEnd - now) / 1000); status('ABILITY CHARGING — ' + left + 's', 900); return; }
+        S.abilityCdEnd = now + def.cooldown;
+        S.abilityActive = true; S.abilityEnd = now + (def.duration || 0);
+        Audio.swap();
+        if (S.ability === 'overdrive') { status('OVERDRIVE ENGAGED', 1600); flash(player.position.add(new V3(0, 1.5, 0)), '#ffdd33', 3.5, 320); if (HELA.Settings.get('shake')) addShake(0.25); }
+        else if (S.ability === 'emp') empBurst(def);
+        else if (S.ability === 'turret') deployTurret(def);
+        else if (S.ability === 'cloak') { status('PHANTOM CLOAK ACTIVE', 1600); setPlayerCloak(true); flash(player.position.add(new V3(0, 1.5, 0)), '#88bbff', 2.5, 300); }
+        updateAbilityHUD();
+    }
+    function empBurst(def) {
+        const now = performance.now();
+        flash(player.position.add(new V3(0, 1.5, 0)), '#66ddff', 5, 420);
+        if (HELA.Settings.get('shake')) addShake(0.45);
+        for (let i = 0; i < 30; i++) { const a = (i / 30) * Math.PI * 2; const s = BABYLON.MeshBuilder.CreateBox('empf', { size: 0.26 }, S.scene); s.material = flatMat('empf', '#0a0a0a', '#66ddff', 1.5); s.position.copyFrom(player.position); s.position.y += 1; s.isPickable = false; particles.push({ mesh: s, vel: new V3(Math.cos(a) * 20, 2 + Math.random() * 2, Math.sin(a) * 20), life: 650, born: now }); }
+        let hit = 0;
+        for (const e of enemies) {
+            if (!e.metadata.alive) continue;
+            if (V3.Distance(e.position, player.position) <= def.radius) {
+                e.metadata.stunUntil = now + def.duration; hit++; flashEnemy(e);
+                if (e.metadata.eyes) e.metadata.eyes.forEach(eye => { if (eye.material) eye.material.emissiveColor = C.FromHexString('#66ddff'); });
+            }
+        }
+        status('EMP BURST — ' + hit + ' HOSTILE' + (hit === 1 ? '' : 'S') + ' STUNNED', 1900);
+    }
+    function deployTurret(def) {
+        const now = performance.now();
+        const pos = player.position.add(forwardVec().scale(2.6)); pos.y = S.groundY - 0.6;
+        const base = BABYLON.MeshBuilder.CreateCylinder('turret', { height: 1.2, diameter: 0.95, tessellation: 8 }, S.scene);
+        base.material = flatMat('turretBase', '#1b2733'); base.position.copyFrom(pos); base.isPickable = false; if (shadowGen) shadowGen.addShadowCaster(base);
+        const head = BABYLON.MeshBuilder.CreateBox('turretHead', { width: 0.75, height: 0.55, depth: 1.05 }, S.scene);
+        head.material = flatMat('turretHead', '#12181f', '#00f3ff', 0.9); head.position.set(pos.x, pos.y + 1.0, pos.z); head.isPickable = false;
+        addNeon('#00f3ff', new V3(pos.x, pos.y + 1.4, pos.z), 0.5, 8);
+        S.turretRef = { base, head, expire: now + def.duration, lastShot: 0 };
+        status('AUTO-TURRET DEPLOYED — 12s', 1700);
+    }
+    function updateTurret() {
+        const t = S.turretRef; if (!t) return;
+        const now = performance.now();
+        if (now > t.expire) { flash(t.head.position.clone(), '#00f3ff', 3, 260); t.base.dispose(); t.head.dispose(); S.turretRef = null; status('AUTO-TURRET OFFLINE', 1200); return; }
+        let target = null, best = 55;
+        for (const e of enemies) { if (!e.metadata.alive) continue; const d = V3.Distance(t.head.position, e.position); if (d < best) { best = d; target = e; } }
+        if (target) {
+            const to = target.position.subtract(t.head.position); t.head.rotation.y = Math.atan2(to.x, to.z);
+            if (now - t.lastShot > 250) {
+                t.lastShot = now;
+                const start = t.head.position.add(new V3(0, 0.3, 0)), end = target.position.add(new V3(0, 1, 0));
+                tracer(start, end, '#00f3ff'); Audio.hit(panFor(target.position));
+                damageEnemy(target, 22, end);
+            }
+        }
+    }
+    function setPlayerCloak(on) {
+        S.cloaked = on;
+        const v = on ? 0.35 : 1;
+        if (vmRoot) vmRoot.getChildMeshes().forEach(m => m.visibility = v);
+        if (player) player.getChildMeshes().forEach(m => { if (m.isEnabled()) m.visibility = v; });
+    }
+    function updateAbility() {
+        const now = performance.now();
+        if (S.abilityActive && now >= S.abilityEnd) {
+            S.abilityActive = false;
+            if (S.ability === 'cloak') { setPlayerCloak(false); status('CLOAK DISENGAGED', 1000); }
+            else if (S.ability === 'overdrive') status('OVERDRIVE EXPIRED', 1000);
+        }
+        // clear expired EMP eye-tint
+        const nowT = now;
+        for (const e of enemies) { const md = e.metadata; if (md.stunUntil && nowT >= md.stunUntil) { md.stunUntil = 0; e.rotation.z = 0; if (md.eyes && md.type) { const T = HELA.ENEMY_TYPES[md.type]; const em = T.eyeEm || T.visorEm; if (em) md.eyes.forEach(eye => { if (eye.material) eye.material.emissiveColor = C.FromHexString(em).scale(1.6); }); } } }
+        updateTurret();
+        updateAbilityHUD();
+    }
+    function updateAbilityHUD() {
+        const def = HELA.ABILITIES[S.ability]; if (!def) return;
+        const hud = $('ability-hud'), arc = $('ability-arc'), icon = $('ability-icon');
+        if (!hud || !arc) return;
+        if (icon) icon.textContent = def.icon;
+        const now = performance.now(), CIRC = 119.38;
+        let frac = (now < S.abilityCdEnd) ? 1 - (S.abilityCdEnd - now) / def.cooldown : 1;
+        frac = Math.max(0, Math.min(1, frac));
+        arc.style.strokeDashoffset = CIRC * (1 - frac);
+        hud.classList.toggle('ready', frac >= 1 && !S.abilityActive);
+        hud.classList.toggle('active', S.abilityActive);
     }
 
     // ---- fx ----
@@ -1183,18 +1279,23 @@ window.HELA = window.HELA || {};
             if (!e.metadata.alive) continue;
             const md = e.metadata;
             const isZombie = md.kind === 'zombie';
+            const stunned = md.stunUntil && now < md.stunUntil;   // EMP burst
+            const frozen = stunned || S.cloaked;                  // cloak = lose track of player
             const stopDist = md.kind === 'boss' ? 8 : (isZombie ? 1.9 : 2.6);
             const to = player.position.subtract(e.position); to.y = 0; const dist = to.length();
-            if (dist > stopDist) {
+            if (!frozen && dist > stopDist) {
                 to.normalize(); e.position.addInPlace(to.scale(md.speed * dt)); e.position.y = md.groundY - 0.5; e.rotation.y = Math.atan2(to.x, to.z);
                 if (md.legs) { md.walk += dt * (isZombie ? 6 : 9); md.legs[0].rotation.x = Math.sin(md.walk) * 0.55; md.legs[1].rotation.x = -Math.sin(md.walk) * 0.55; }
                 if (md.arms && isZombie) { const sway = Math.sin(md.walk * 0.5) * 0.12; md.arms[0].rotation.x = -1.2 + sway; md.arms[1].rotation.x = -1.2 - sway; }
+            } else if (stunned) {
+                e.rotation.z = Math.sin(now * 0.03) * 0.12;   // EMP twitch
             }
             // health bar follow
             const bp = e.position.add(new V3(0, md.headY, 0));
             md.barBg && md.barBg.position.copyFrom(bp); md.barFg && md.barFg.position.copyFrom(bp);
             if (md.barFg) md.barFg.scaling.x = Math.max(0, md.health / md.maxHealth);
-            // attack
+            // attack (suppressed while stunned or the player is cloaked)
+            if (frozen) continue;
             if (isZombie) {
                 if (dist <= stopDist + 0.6 && now - md.lastShot > md.fire) { md.lastShot = now; takeDamage(md.dmg + Math.random() * 4); if (HELA.Settings.get('shake')) addShake(0.12); }
             } else if (dist < (md.kind === 'boss' ? 60 : 42) && now - md.lastShot > md.fire) {
@@ -1325,6 +1426,7 @@ window.HELA = window.HELA || {};
             if (k === 'v') toggleView();
             if (k === 'h') useItem('medkit');
             if (k === 'g') useItem('grenade');
+            if (k === 'f') activateAbility();
             if (['1', '2', '3', '4'].includes(k)) { const id = HELA.WEAPON_ORDER[parseInt(k) - 1]; if (id) switchWeapon(id); }
             if (e.key === 'Escape') { if (S.running && !S.paused) HELA.Game.togglePause(); }
         });
@@ -1349,7 +1451,7 @@ window.HELA = window.HELA || {};
         if (!S.scene) return;
         const dt = Math.min(engine.getDeltaTime() / 1000, 0.05), t = performance.now() / 1000;
         if (S.running && !S.paused) {
-            updatePlayer(dt); updateViewmodel(dt); updateEnemies(dt); updateBolts(dt); updateGrenades(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt);
+            updatePlayer(dt); updateViewmodel(dt); updateEnemies(dt); updateBolts(dt); updateGrenades(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt); updateAbility();
             if (S.mouseDown && curW().auto) shoot();
             if (S.frame % 6 === 0) updateHUD();
             if (S.frame % 3 === 0) { const ray = new BABYLON.Ray(camera.position, aimVec(0), 140); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
