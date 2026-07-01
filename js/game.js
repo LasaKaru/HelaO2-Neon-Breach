@@ -76,13 +76,15 @@ window.HELA = window.HELA || {};
         codes: {}, bossRef: null, mapOpen: false, frame: 0, fpsTime: 0,
         bounds: 70, groundY: 3.55, theme: 'neon',
         fpv: true, vmKick: 0, vmBob: 0,
+        aug: {}, maxHealth: 100, maxShield: 100, inGrenade: false,
+        ability: 'overdrive', abilityActive: false, abilityEnd: 0, abilityCdEnd: 0, cloaked: false, turretRef: null,
     };
     HELA.Game = { currentLevelId: 1 };
 
     let engine, camera, glow, shadowGen, pipeline, ssaoPipe;
     let player, muzzle, playerHead, vmRoot, vmMuzzle;
     let enemies = [], colliders = [], interactables = [], particles = [], bolts = [], pickups = [];
-    let windNodes = [], motes = [], grenadesArr = [];
+    let windNodes = [], motes = [], grenadesArr = [], mistArr = [];
     let domeMesh, domeShieldUp = true, minimapCtx, bigmapCtx;
     let canvas;
     let SPAWN = [];
@@ -154,7 +156,15 @@ window.HELA = window.HELA || {};
             inventory: { datacache: 0, medkit: 0, grenade: 0, cell: 0, ammo: 0 },
             yaw: 0, pitch: 0.18, dashVel: V3.Zero(), reloading: false, shake: 0,
         });
-        if (S.codes.god) S.health = 100;
+        // equipped augments
+        S.aug = (HELA.Save && HELA.Save.equippedEffects) ? HELA.Save.equippedEffects() : {};
+        S.maxHealth = 100 + (S.aug.maxHealth || 0);
+        S.maxShield = 100 + (S.aug.maxShield || 0);
+        S.health = S.maxHealth; S.shield = S.maxShield;
+        if (S.codes.god) S.health = S.maxHealth;
+        // active ability (equipped in the Armory, fired with F)
+        S.ability = (HELA.Save && HELA.Save.data && HELA.ABILITIES[HELA.Save.data.ability]) ? HELA.Save.data.ability : 'overdrive';
+        S.abilityActive = false; S.abilityEnd = 0; S.abilityCdEnd = 0; S.cloaked = false; S.turretRef = null;
 
         // weapons: ensure starting loadout
         if (!S.weaponState.spike) for (const id of HELA.WEAPON_ORDER) { const w = HELA.WEAPONS[id]; S.weaponState[id] = { mag: w.mag, reserve: w.infinite ? Infinity : w.reserve }; }
@@ -165,7 +175,7 @@ window.HELA = window.HELA || {};
         initDirector();
         scatterCollectibles();
         Audio.resume();
-        updateHUD(); renderWeaponSlots(); updateInventoryHUD();
+        updateHUD(); renderWeaponSlots(); updateInventoryHUD(); updateAbilityHUD();
         status((S.isRandom ? 'RANDOM OP — ' : 'MISSION — ') + S.level.name, 3200);
         announce(S.level.name, S.level.jp);
     };
@@ -227,7 +237,7 @@ window.HELA = window.HELA || {};
         S.bounds = lv.bigMap ? 112 : 70;
         S.groundY = (S.theme === 'forest') ? 1.85 : 3.55;
         SPAWN = buildSpawnRing(S.bounds);
-        windNodes = []; motes = [];
+        windNodes = []; motes = []; mistArr = [];
 
         const scene = new BABYLON.Scene(engine); S.scene = scene;
         scene.clearColor = new BABYLON.Color4(...hexToRgb01(lv.sky || lv.fog), 1);
@@ -284,8 +294,10 @@ window.HELA = window.HELA || {};
         rail(-2, 6, 70, 0.5, '#ff1f8a'); rail(-3.4, 6, 70, 0.18, '#ff1f8a');
         rail(8, 14, 40, 0.35, lv.accent); rail(-22, -2, 30, 0.3, '#00ffcc');
 
-        addBox('platform', { w: 22, h: 3.5, d: 18 }, new V3(-4, 1.75, 6), '#2a2f3e', true);
-        for (let i = 0; i < 3; i++) addBox('step', { w: 8, h: 0.9, d: 3 }, new V3(8 + i * 2.8, 0.45 + i * 0.9, 6), '#252a38', true);
+        // flat cracked-concrete slab at the start — decorative & walkable, NOT a wall
+        const slab = BABYLON.MeshBuilder.CreateGround('slab', { width: 28, height: 24 }, scene);
+        const sm = new BABYLON.StandardMaterial('slabM', scene); sm.diffuseColor = C.FromHexString('#3b424a'); sm.specularColor = new C(0, 0, 0);
+        slab.material = sm; slab.position.set(-4, 0.06, 6); slab.receiveShadows = true; slab.isPickable = false;
         addBox('cover1', { w: 5, h: 4, d: 6 }, new V3(14, 2, -8), '#252a38', true);
         addBox('cover2', { w: 4, h: 5.5, d: 7.8 }, new V3(-16, 2.75, -14), '#222735', true);
         addBox('cover3', { w: 6, h: 3, d: 3.2 }, new V3(2, 1.5, -2), '#262b3a', true);
@@ -309,6 +321,19 @@ window.HELA = window.HELA || {};
         const layout = [[-32,-18,11,28,9],[-38,8,8,22,7],[-25,24,9,19,8],[26,-25,10,31,8],[34,4,7,26,6],[18,20,12,17,9],[-8,-40,14,36,11],[16,-44,9,26,7],[44,-10,9,30,8],[-46,-6,8,24,7]];
         layout.forEach((b, i) => addBuilding(b[0] + (Math.random() - 0.5) * 6, b[1] + (Math.random() - 0.5) * 6, b[2], b[3] * (0.8 + Math.random() * 0.5), b[4], cityColors[i % 4]));
 
+        // tall ruined towers inside the arena (windowed + mossed later)
+        [[-30,-30,9,48,9],[31,-34,10,60,10],[-42,16,8,42,8],[42,18,9,52,9],[6,-52,12,66,12],[-16,32,10,46,10],[50,-2,9,40,9]]
+            .forEach((t, i) => addBuilding(t[0], t[1], t[2], t[3], t[4], ['#5a6358', '#525b50'][i % 2]));
+        // huge moss-covered concrete monolith chunks (cover)
+        for (let i = 0; i < 12; i++) {
+            const x = (Math.random() - 0.5) * S.bounds * 1.3, z = (Math.random() - 0.5) * S.bounds * 1.3;
+            if (Math.hypot(x + 4, z - 6) < 16) continue;
+            const w = 5 + Math.random() * 7, h = 5 + Math.random() * 9, d = 5 + Math.random() * 7;
+            const mk = addBox('monolith', { w, h, d }, new V3(x, h / 2, z), '#54604f', true); mk.rotation.y = (Math.random() - 0.5) * 0.7;
+        }
+        // dense skyscraper skyline fading into the mist
+        buildSkyline(S.bounds);
+
         // themed neon signs
         const signs = lv.signs || [];
         if (signs[0]) neonSign(-29, 14, -17, signs[0][0], signs[0][1], 6);
@@ -317,6 +342,49 @@ window.HELA = window.HELA || {};
         floatingPanel(8, 6, 18, lv.accent); floatingPanel(-14, 7.5, -9, '#ff00aa');
 
         overgrow(lv);   // trees, grass, moss, vines, rubble reclaiming the ruins
+        addCables();    // drooping power lines between the tall ruins
+        addMist(S.bounds); // low-lying volumetric haze
+    }
+    // dense background skyscrapers (non-colliding, lost in fog)
+    function buildSkyline(B) {
+        const scene = S.scene, greys = ['#7e857b', '#737a70', '#868d82', '#6b7268'];
+        for (let i = 0; i < 50; i++) {
+            const a = Math.random() * Math.PI * 2, r = B * 1.45 + Math.random() * B * 1.2;
+            const x = Math.cos(a) * r, z = Math.sin(a) * r, h = 40 + Math.random() * 85, w = 8 + Math.random() * 16, d = 8 + Math.random() * 16;
+            const b = BABYLON.MeshBuilder.CreateBox('skytower', { width: w, height: h, depth: d }, scene);
+            const m = new BABYLON.StandardMaterial('skyM', scene); m.diffuseColor = C.FromHexString(greys[i % 4]); m.specularColor = new C(0, 0, 0);
+            b.material = m; b.position.set(x, h / 2, z); b.isPickable = false;
+            if (Math.random() > 0.6) { const an = BABYLON.MeshBuilder.CreateCylinder('ant', { height: 8 + Math.random() * 10, diameter: 0.6, tessellation: 4 }, scene); an.material = m; an.position.set(x, h + 5, z); an.isPickable = false; }
+        }
+    }
+    function addCable(a, b) {
+        const pts = [], seg = 12, sag = 2.5 + Math.random() * 2.5;
+        for (let i = 0; i <= seg; i++) { const t = i / seg, p = V3.Lerp(a, b, t); p.y -= Math.sin(t * Math.PI) * sag; pts.push(p); }
+        const l = BABYLON.MeshBuilder.CreateLines('cable', { points: pts }, S.scene); l.color = new C(0.06, 0.06, 0.07); l.isPickable = false;
+    }
+    function addCables() {
+        const tall = colliders.filter(c => { const bb = c.getBoundingInfo().boundingBox; return (bb.maximumWorld.y - bb.minimumWorld.y) > 22; });
+        let made = 0;
+        for (let i = 0; i < tall.length && made < 9; i++) {
+            const a = tall[i], b = tall[(i + 1) % tall.length]; if (a === b) continue;
+            const ay = a.getBoundingInfo().boundingBox.maximumWorld.y, by = b.getBoundingInfo().boundingBox.maximumWorld.y;
+            const at = new V3(a.position.x, ay - 2, a.position.z), bt = new V3(b.position.x, by - 2, b.position.z);
+            if (V3.Distance(at, bt) > 75) continue;
+            addCable(at, bt); made++;
+        }
+    }
+    function addMist(B) {
+        const dt = new BABYLON.DynamicTexture('mistTex', { width: 128, height: 128 }, S.scene, false);
+        const ctx = dt.getContext(), g = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+        g.addColorStop(0, 'rgba(222,229,223,0.85)'); g.addColorStop(1, 'rgba(222,229,223,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128); dt.update(); dt.hasAlpha = true;
+        for (let i = 0; i < 12; i++) {
+            const p = BABYLON.MeshBuilder.CreatePlane('mist', { size: 16 + Math.random() * 22 }, S.scene);
+            const m = new BABYLON.StandardMaterial('mistM', S.scene); m.diffuseTexture = dt; m.opacityTexture = dt; m.emissiveColor = C.FromHexString('#ccd5cf'); m.disableLighting = true; m.alpha = 0.5; m.backFaceCulling = false;
+            p.material = m; p.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL; p.isPickable = false;
+            p.position.set((Math.random() - 0.5) * B * 1.6, 2 + Math.random() * 5, (Math.random() - 0.5) * B * 1.6);
+            mistArr.push({ mesh: p, sp: 0.2 + Math.random() * 0.5, phase: Math.random() * 6.28, drift: (Math.random() - 0.5) * 0.012 });
+        }
     }
 
     // ------- nature reclaiming the ruins -------
@@ -337,16 +405,18 @@ window.HELA = window.HELA || {};
                 windNodes.push({ node: v, phase: Math.random() * 6.28, amp: 0.05, speed: 0.7 });
             }
         }
-        // trees growing through the city
-        const density = lv.treeDensity || 1, treeCount = Math.floor(36 * density);
+        // trees growing through the city — dense
+        const density = lv.treeDensity || 1, treeCount = Math.floor(58 * density);
         let placed = 0, guard = 0;
-        while (placed < treeCount && guard < 600) {
-            guard++; const x = (Math.random() - 0.5) * B * 1.8, z = (Math.random() - 0.5) * B * 1.8;
-            if (Math.hypot(x + 4, z - 6) < 14) continue;   // keep the start platform clear
-            makeTree(x, z, 0.8 + Math.random() * 0.9, false); placed++;
+        while (placed < treeCount && guard < 900) {
+            guard++; const x = (Math.random() - 0.5) * B * 1.9, z = (Math.random() - 0.5) * B * 1.9;
+            if (Math.hypot(x + 4, z - 6) < 13) continue;   // keep the start platform clear
+            makeTree(x, z, 0.8 + Math.random() * 1.0, false); placed++;
         }
-        // hazy distant treeline
-        for (let i = 0; i < 44; i++) { const a = (i / 44) * Math.PI * 2, r = B * 1.7 + Math.random() * 30; makeTree(Math.cos(a) * r, Math.sin(a) * r, 1.2 + Math.random() * 0.6, true); }
+        // big canopy "hero" trees framing the arena
+        [[22, 20], [-24, 18], [26, -12], [-20, -16], [14, 26]].forEach(([x, z]) => makeTree(x, z, 2.5 + Math.random() * 1.1, false));
+        // thick hazy distant treeline
+        for (let i = 0; i < 64; i++) { const a = (i / 64) * Math.PI * 2, r = B * 1.55 + Math.random() * 40; makeTree(Math.cos(a) * r, Math.sin(a) * r, 1.3 + Math.random() * 0.8, true); }
         // rubble boulders
         for (let i = 0; i < 18; i++) { const x = (Math.random() - 0.5) * B * 1.5, z = (Math.random() - 0.5) * B * 1.5; if (Math.hypot(x + 4, z - 6) < 10) continue; makeRock(x, z, 0.7 + Math.random() * 1.6); }
         // grass everywhere + drifting leaves
@@ -466,6 +536,11 @@ window.HELA = window.HELA || {};
             mo.mesh.position.x += drift; mo.mesh.position.y += Math.sin(t * mo.sp + mo.phase) * 0.004;
             if (mo.mesh.position.x > S.bounds * 0.9) mo.mesh.position.x = -S.bounds * 0.9;
         }
+        for (const mi of mistArr) {
+            mi.mesh.position.x += mi.drift; mi.mesh.position.y += Math.sin(t * mi.sp + mi.phase) * 0.003;
+            if (mi.mesh.position.x > S.bounds) mi.mesh.position.x = -S.bounds;
+            else if (mi.mesh.position.x < -S.bounds) mi.mesh.position.x = S.bounds;
+        }
     }
 
     function rail(x, z, len, w, hex) {
@@ -506,18 +581,18 @@ window.HELA = window.HELA || {};
     }
     function applyCollectible(ctype) {
         const def = HELA.COLLECTIBLES[ctype]; Audio.pickup();
-        if (def.mission) { S.collected++; S.inventory.datacache++; status(def.name + ' RECOVERED — ' + S.collected + '/' + S.collectTarget, 1600); checkObjective(); }
+        if (def.mission) { S.collected++; S.inventory.datacache++; if (HELA.Save) HELA.Save.track('caches', 1); status(def.name + ' RECOVERED — ' + S.collected + '/' + S.collectTarget, 1600); checkObjective(); }
         else if (def.stored) { S.inventory[ctype]++; status('PICKED UP ' + def.name + '  (' + S.inventory[ctype] + ')', 1300); }
         else if (def.score) { S.score += def.score; S.inventory.cell++; status('+' + def.score + ' NEON CELL', 1100); }
-        else if (def.ammo) { const a = curAmmo(); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + def.ammo, 320); status('+' + def.ammo + ' AMMO', 1000); }
+        else if (def.ammo) { const a = curAmmo(); const amt = Math.round(def.ammo * (S.aug.ammoMult || 1)); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + amt, 360); status('+' + amt + ' AMMO', 1000); }
         updateInventoryHUD(); updateHUD();
     }
     function useItem(ctype) {
         const def = HELA.COLLECTIBLES[ctype];
         if (!def || !S.inventory[ctype]) { status('NO ' + (def ? def.name : 'ITEM'), 1000); return; }
         if (def.use === 'heal') {
-            if (S.health >= 100) { status('INTEGRITY FULL', 1000); return; }
-            S.inventory.medkit--; S.health = Math.min(100, S.health + 50); Audio.pickup(); status('MEDKIT USED — +50 INTEGRITY', 1400);
+            if (S.health >= S.maxHealth) { status('INTEGRITY FULL', 1000); return; }
+            S.inventory.medkit--; S.health = Math.min(S.maxHealth, S.health + 50); Audio.pickup(); status('MEDKIT USED — +50 INTEGRITY', 1400);
         } else if (def.use === 'throw') {
             S.inventory.grenade--; throwGrenade(); Audio.swap();
         }
@@ -542,7 +617,9 @@ window.HELA = window.HELA || {};
         flash(pos, '#ffaa44', 6, 240); if (HELA.Settings.get('shake')) addShake(0.5);
         Audio.kill(panFor(pos));
         for (let i = 0; i < 24; i++) { const s = BABYLON.MeshBuilder.CreateBox('frag', { size: 0.2 }, S.scene); s.material = flatMat('frag', '#0a0a0a', '#ffcc66', 1.2); s.position.copyFrom(pos); s.isPickable = false; particles.push({ mesh: s, vel: new V3((Math.random() - 0.5) * 24, Math.random() * 16 + 4, (Math.random() - 0.5) * 24), life: 700, born: performance.now() }); }
+        S.inGrenade = true;
         for (const e of enemies.slice()) { if (!e.metadata.alive) continue; const d = V3.Distance(e.position, pos); if (d < 9) damageEnemy(e, Math.round(160 * (1 - d / 9)), e.position.add(new V3(0, 1, 0))); }
+        S.inGrenade = false;
     }
     function addBox(name, s, pos, hex, collide) {
         const m = BABYLON.MeshBuilder.CreateBox(name, { width: s.w, height: s.h, depth: s.d }, S.scene);
@@ -583,7 +660,7 @@ window.HELA = window.HELA || {};
     // ---- player ----
     function buildPlayer() {
         player = new BABYLON.TransformNode('player', S.scene);
-        player.position.set(-5, 3.55, 7); player.metadata = { bob: 0 };
+        player.position.set(-4, 2.0, 6); player.metadata = { bob: 0 };
         const part = (name, s, pos, hex, em, emAmt) => {
             const m = BABYLON.MeshBuilder.CreateBox(name, { width: s[0], height: s[1], depth: s[2] }, S.scene);
             m.material = flatMat(name, hex, em, emAmt); m.position.copyFrom(pos); m.parent = player;
@@ -671,7 +748,7 @@ window.HELA = window.HELA || {};
     }
     function tamper(item) {
         if (item.hacked) return;
-        item.hacked = true; S.terminalsHacked++; Audio.hack();
+        item.hacked = true; S.terminalsHacked++; Audio.hack(); if (HELA.Save) HELA.Save.track('hacks', 1);
         item.screen.getContext().clearRect(0, 0, 256, 192); drawTermHacked(item.screen.getContext(), 256, 192); item.screen.update();
         item.mesh.material.emissiveColor = C.FromHexString('#00ffcc').scale(0.4);
         if (domeShieldUp) { domeShieldUp = false; domeMesh.material.alpha = 0.06; if (domeMesh.metadata.core) domeMesh.metadata.core.material.alpha = 0.04; status('DATA-SPIKE DEPLOYED — SHIELD BYPASSED', 3200); }
@@ -755,7 +832,7 @@ window.HELA = window.HELA || {};
         const rleg = new BABYLON.TransformNode('rleg', S.scene); rleg.parent = e; rleg.position.set(0.24 * s, -0.3 * s, 0);
         part([0.3, 1.0, 0.32], new V3(0, -0.5, 0), T.pants, null, null, lleg);
         part([0.3, 1.0, 0.32], new V3(0, -0.5, 0), T.pants, null, null, rleg);
-        e.metadata = { kind: 'zombie', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], arms: [larm, rarm], walk: Math.random() * 6, groundY: 2.3 };
+        e.metadata = { kind: 'zombie', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], arms: [larm, rarm], walk: Math.random() * 6, groundY: 2.0 };
         attachHealthBar(e, 1.4, 2.7 * s);
         if (S.codes.bighead) head.scaling.setAll(1.9);
         enemies.push(e); return e;
@@ -782,7 +859,7 @@ window.HELA = window.HELA || {};
         part([0.18, 0.18, 0.18], new V3(0, 2.4, 0), T.eye, T.eyeEm, 1.4);
         const arm = part([0.25, 0.9, 0.25], new V3(0.62, 0.4, 0.1), '#2a1c1c'); arm.rotation.z = -0.6;
         part([0.28, 0.9, 0.35], new V3(-0.32, -1.0, 0), '#2a1c1c'); part([0.28, 0.9, 0.35], new V3(0.32, -1.0, 0), '#2a1c1c');
-        e.metadata = { kind: 'drone', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 3.5 };
+        e.metadata = { kind: 'drone', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 3.0 };
         attachHealthBar(e, 1.4, 2.7 * s);
         if (S.codes.bighead) head.scaling.setAll(1.9);
         enemies.push(e); return e;
@@ -810,7 +887,7 @@ window.HELA = window.HELA || {};
         const rleg = new BABYLON.TransformNode('rleg', S.scene); rleg.parent = e; rleg.position.set(0.26 * s, -0.3 * s, 0);
         part([0.32, 1.0, 0.34], new V3(0, -0.5, 0), T.suit, null, null, lleg);
         part([0.32, 1.0, 0.34], new V3(0, -0.5, 0), T.suit, null, null, rleg);
-        e.metadata = { kind: 'human', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes: [], headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], rarm, walk: 0, groundY: 4.0 };
+        e.metadata = { kind: 'human', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes: [], headMesh: head, compromised: false, alive: true, legs: [lleg, rleg], rarm, walk: 0, groundY: 2.0 };
         attachHealthBar(e, 1.5, 2.9 * s);
         if (S.codes.bighead) head.scaling.setAll(1.9);
         enemies.push(e); return e;
@@ -830,7 +907,7 @@ window.HELA = window.HELA || {};
         part([0.7, 0.7, 1.4], new V3(-1.6, 0.7, 0.5), '#0a0510', T.eyeEm, 0.5); // left cannon
         part([0.7, 0.7, 1.4], new V3(1.6, 0.7, 0.5), '#0a0510', T.eyeEm, 0.5);  // right cannon
         part([0.8, 1.6, 0.8], new V3(-0.7, -1.6, 0), '#150815'); part([0.8, 1.6, 0.8], new V3(0.7, -1.6, 0), '#150815'); // legs
-        e.metadata = { kind: 'boss', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 5.0 };
+        e.metadata = { kind: 'boss', type: typeKey, health: T.hp, maxHealth: T.hp, speed: T.speed, dmg: T.dmg, fire: T.fire, points: T.points, lastShot: performance.now(), eyes, headMesh: head, compromised: false, alive: true, groundY: 6.5 };
         S.bossRef = e; enemies.push(e);
         $('boss-bar').classList.remove('hidden'); $('boss-name').textContent = 'OMEGA WAR-MECH';
         Audio.boss();
@@ -869,6 +946,7 @@ window.HELA = window.HELA || {};
         if (!S.running || S.objectiveDone) return;
         if (S.mode === 'survive') {
             if (!S.betweenWaves && !enemies.some(e => e.metadata.alive)) {
+                if (HELA.Save) HELA.Save.track('waves', 1);
                 if (S.wave >= S.level.waves) { completeObjective(); return; }
                 S.betweenWaves = true;
                 const reward = 20 + S.wave * 4; S.weaponState[S.curWeapon] && (S.weaponState[S.curWeapon].reserve = (S.weaponState[S.curWeapon].reserve === Infinity ? Infinity : Math.min(S.weaponState[S.curWeapon].reserve + reward, 300)));
@@ -934,30 +1012,33 @@ window.HELA = window.HELA || {};
         setTimeout(() => {
             const need = w.mag - a.mag, take = Math.min(need, a.reserve);
             a.mag += take; if (a.reserve !== Infinity) a.reserve -= take; S.reloading = false; updateHUD();
-        }, 600);
+        }, 600 * (S.aug.reloadMult || 1));
     }
     function dash() {
         const now = performance.now();
-        if (now - S.lastDash < CFG.dashCooldown || !S.running || S.paused) return;
+        if (now - S.lastDash < CFG.dashCooldown * (S.aug.dashCdMult || 1) || !S.running || S.paused) return;
         S.lastDash = now; S.dashVel = forwardVec().scale(CFG.dashImpulse * (S.codes.lowgrav ? 1.3 : 1)); Audio.dash();
     }
     function shoot() {
         const now = performance.now(), w = curW(), a = curAmmo();
-        if (now - S.lastShot < w.cooldown || S.reloading) return;
+        const overdrive = S.abilityActive && S.ability === 'overdrive';
+        if (now - S.lastShot < w.cooldown * (overdrive ? 0.714 : 1) || S.reloading) return;
         if (a.mag <= 0 && !S.codes.infammo) { reload(); return; }
         S.lastShot = now; if (!S.codes.infammo) a.mag--; updateHUD(); Audio.shoot(w.id);
         if (HELA.Settings.get('shake')) addShake(w.recoil);
         S.vmKick = Math.max(S.vmKick, w.recoil);
-        // ray from the eye (FPS) so the crosshair is the true aim point
-        const origin = (S.fpv ? camera.position : muzzle.getAbsolutePosition()).clone();
-        const visualStart = (S.fpv && vmMuzzle) ? vmMuzzle.getAbsolutePosition() : origin;
+        // Cast from the camera through screen-centre so the shot always lands on
+        // the crosshair; the visible tracer starts at the gun muzzle.
+        const origin = camera.position.clone();
+        const visualStart = S.fpv ? (vmMuzzle ? vmMuzzle.getAbsolutePosition() : origin) : muzzle.getAbsolutePosition();
         flash(visualStart, w.tracer, 3.0, 70);
+        const dmg = w.dmg * (S.aug.dmgMult || 1) * (overdrive ? 1.25 : 1);
         for (let p = 0; p < w.pellets; p++) {
             const dir = aimVec(w.spread);
             const ray = new BABYLON.Ray(origin, dir, 140);
             const hit = S.scene.pickWithRay(ray, (m) => m.isPickable && m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive);
             let end;
-            if (hit && hit.hit) { end = hit.pickedPoint; damageEnemy(hit.pickedMesh.metadata.enemy, w.dmg, end); }
+            if (hit && hit.hit) { end = hit.pickedPoint; damageEnemy(hit.pickedMesh.metadata.enemy, dmg, end); }
             else { const wh = S.scene.pickWithRay(ray, (m) => m.isPickable); end = (wh && wh.hit) ? wh.pickedPoint : origin.add(dir.scale(100)); if (p === 0) impact(end); }
             if (p % 2 === 0) tracer(visualStart, end, w.tracer);
         }
@@ -973,7 +1054,7 @@ window.HELA = window.HELA || {};
     }
     function flashEnemy(e) {
         if (!e.metadata.eyes || !e.metadata.eyes.length) return;
-        e.metadata.eyes.forEach(eye => { const o = eye.material.emissiveColor.clone(); eye.material.emissiveColor = new C(1, 1, 1); setTimeout(() => { eye.material.emissiveColor = o; }, 100); });
+        e.metadata.eyes.forEach(eye => { if (!eye.material) return; const o = eye.material.emissiveColor.clone(); eye.material.emissiveColor = new C(1, 1, 1); setTimeout(() => { if (eye.material) eye.material.emissiveColor = o; }, 100); });
     }
     function destroyEnemy(e) {
         e.metadata.alive = false; const pos = e.position.clone(), pan = panFor(pos), points = e.metadata.points, isBoss = e.metadata.kind === 'boss';
@@ -989,6 +1070,8 @@ window.HELA = window.HELA || {};
         e.dispose();
         const idx = enemies.indexOf(e); if (idx >= 0) enemies.splice(idx, 1);
         S.kills++;
+        if (HELA.Save) { HELA.Save.track('kills', 1); if (S.inGrenade) HELA.Save.track('nadekills', 1); }
+        if (S.aug.lifesteal && S.health > 0) S.health = Math.min(S.maxHealth, S.health + S.aug.lifesteal);
         const now = performance.now();
         if (now - S.lastKill < CFG.comboWindow) S.combo++; else S.combo = 1; S.lastKill = now;
         const mult = Math.min(S.combo, 8); S.score += (points * 100) * mult;
@@ -1012,6 +1095,97 @@ window.HELA = window.HELA || {};
     function endGame() {
         S.over = true; S.running = false; document.exitPointerLock();
         if (HELA.UI && HELA.UI.onGameOver) HELA.UI.onGameOver({ score: S.score, kills: S.kills });
+    }
+
+    // =================================================================
+    //  ACTIVE ABILITIES  (equipped in Armory, fired with F)
+    // =================================================================
+    function activateAbility() {
+        if (!S.running || S.paused || S.over) return;
+        const now = performance.now(), def = HELA.ABILITIES[S.ability];
+        if (!def) return;
+        if (now < S.abilityCdEnd) { const left = Math.ceil((S.abilityCdEnd - now) / 1000); status('ABILITY CHARGING — ' + left + 's', 900); return; }
+        S.abilityCdEnd = now + def.cooldown;
+        S.abilityActive = true; S.abilityEnd = now + (def.duration || 0);
+        Audio.swap();
+        if (S.ability === 'overdrive') { status('OVERDRIVE ENGAGED', 1600); flash(player.position.add(new V3(0, 1.5, 0)), '#ffdd33', 3.5, 320); if (HELA.Settings.get('shake')) addShake(0.25); }
+        else if (S.ability === 'emp') empBurst(def);
+        else if (S.ability === 'turret') deployTurret(def);
+        else if (S.ability === 'cloak') { status('PHANTOM CLOAK ACTIVE', 1600); setPlayerCloak(true); flash(player.position.add(new V3(0, 1.5, 0)), '#88bbff', 2.5, 300); }
+        updateAbilityHUD();
+    }
+    function empBurst(def) {
+        const now = performance.now();
+        flash(player.position.add(new V3(0, 1.5, 0)), '#66ddff', 5, 420);
+        if (HELA.Settings.get('shake')) addShake(0.45);
+        for (let i = 0; i < 30; i++) { const a = (i / 30) * Math.PI * 2; const s = BABYLON.MeshBuilder.CreateBox('empf', { size: 0.26 }, S.scene); s.material = flatMat('empf', '#0a0a0a', '#66ddff', 1.5); s.position.copyFrom(player.position); s.position.y += 1; s.isPickable = false; particles.push({ mesh: s, vel: new V3(Math.cos(a) * 20, 2 + Math.random() * 2, Math.sin(a) * 20), life: 650, born: now }); }
+        let hit = 0;
+        for (const e of enemies) {
+            if (!e.metadata.alive) continue;
+            if (V3.Distance(e.position, player.position) <= def.radius) {
+                e.metadata.stunUntil = now + def.duration; hit++; flashEnemy(e);
+                if (e.metadata.eyes) e.metadata.eyes.forEach(eye => { if (eye.material) eye.material.emissiveColor = C.FromHexString('#66ddff'); });
+            }
+        }
+        status('EMP BURST — ' + hit + ' HOSTILE' + (hit === 1 ? '' : 'S') + ' STUNNED', 1900);
+    }
+    function deployTurret(def) {
+        const now = performance.now();
+        const pos = player.position.add(forwardVec().scale(2.6)); pos.y = S.groundY - 0.6;
+        const base = BABYLON.MeshBuilder.CreateCylinder('turret', { height: 1.2, diameter: 0.95, tessellation: 8 }, S.scene);
+        base.material = flatMat('turretBase', '#1b2733'); base.position.copyFrom(pos); base.isPickable = false; if (shadowGen) shadowGen.addShadowCaster(base);
+        const head = BABYLON.MeshBuilder.CreateBox('turretHead', { width: 0.75, height: 0.55, depth: 1.05 }, S.scene);
+        head.material = flatMat('turretHead', '#12181f', '#00f3ff', 0.9); head.position.set(pos.x, pos.y + 1.0, pos.z); head.isPickable = false;
+        addNeon('#00f3ff', new V3(pos.x, pos.y + 1.4, pos.z), 0.5, 8);
+        S.turretRef = { base, head, expire: now + def.duration, lastShot: 0 };
+        status('AUTO-TURRET DEPLOYED — 12s', 1700);
+    }
+    function updateTurret() {
+        const t = S.turretRef; if (!t) return;
+        const now = performance.now();
+        if (now > t.expire) { flash(t.head.position.clone(), '#00f3ff', 3, 260); t.base.dispose(); t.head.dispose(); S.turretRef = null; status('AUTO-TURRET OFFLINE', 1200); return; }
+        let target = null, best = 55;
+        for (const e of enemies) { if (!e.metadata.alive) continue; const d = V3.Distance(t.head.position, e.position); if (d < best) { best = d; target = e; } }
+        if (target) {
+            const to = target.position.subtract(t.head.position); t.head.rotation.y = Math.atan2(to.x, to.z);
+            if (now - t.lastShot > 250) {
+                t.lastShot = now;
+                const start = t.head.position.add(new V3(0, 0.3, 0)), end = target.position.add(new V3(0, 1, 0));
+                tracer(start, end, '#00f3ff'); Audio.hit(panFor(target.position));
+                damageEnemy(target, 22, end);
+            }
+        }
+    }
+    function setPlayerCloak(on) {
+        S.cloaked = on;
+        const v = on ? 0.35 : 1;
+        if (vmRoot) vmRoot.getChildMeshes().forEach(m => m.visibility = v);
+        if (player) player.getChildMeshes().forEach(m => { if (m.isEnabled()) m.visibility = v; });
+    }
+    function updateAbility() {
+        const now = performance.now();
+        if (S.abilityActive && now >= S.abilityEnd) {
+            S.abilityActive = false;
+            if (S.ability === 'cloak') { setPlayerCloak(false); status('CLOAK DISENGAGED', 1000); }
+            else if (S.ability === 'overdrive') status('OVERDRIVE EXPIRED', 1000);
+        }
+        // clear expired EMP eye-tint
+        const nowT = now;
+        for (const e of enemies) { const md = e.metadata; if (md.stunUntil && nowT >= md.stunUntil) { md.stunUntil = 0; e.rotation.z = 0; if (md.eyes && md.type) { const T = HELA.ENEMY_TYPES[md.type]; const em = T.eyeEm || T.visorEm; if (em) md.eyes.forEach(eye => { if (eye.material) eye.material.emissiveColor = C.FromHexString(em).scale(1.6); }); } } }
+        updateTurret();
+        updateAbilityHUD();
+    }
+    function updateAbilityHUD() {
+        const def = HELA.ABILITIES[S.ability]; if (!def) return;
+        const hud = $('ability-hud'), arc = $('ability-arc'), icon = $('ability-icon');
+        if (!hud || !arc) return;
+        if (icon) icon.textContent = def.icon;
+        const now = performance.now(), CIRC = 119.38;
+        let frac = (now < S.abilityCdEnd) ? 1 - (S.abilityCdEnd - now) / def.cooldown : 1;
+        frac = Math.max(0, Math.min(1, frac));
+        arc.style.strokeDashoffset = CIRC * (1 - frac);
+        hud.classList.toggle('ready', frac >= 1 && !S.abilityActive);
+        hud.classList.toggle('active', S.abilityActive);
     }
 
     // ---- fx ----
@@ -1045,23 +1219,37 @@ window.HELA = window.HELA || {};
         const fwd = forwardVec(), right = rightVec();
         let mx = 0, mz = 0;
         if (S.keys['w']) mz += 1; if (S.keys['s']) mz -= 1; if (S.keys['d']) mx += 1; if (S.keys['a']) mx -= 1;
-        let speed = CFG.moveSpeed * (S.keys['shift'] ? CFG.sprintMult : 1) * (S.codes.haste ? 1.6 : 1);
+        let speed = CFG.moveSpeed * (S.keys['shift'] ? CFG.sprintMult : 1) * (S.codes.haste ? 1.6 : 1) * (S.aug.speedMult || 1);
         let move = V3.Zero();
         if (mx || mz) { move = fwd.scale(mz).add(right.scale(mx)); move.y = 0; move.normalize().scaleInPlace(speed * dt); }
         if (S.dashVel.lengthSquared() > 0.01) { move.addInPlace(S.dashVel.scale(dt)); S.dashVel.scaleInPlace(Math.pow(0.0001, dt)); if (S.dashVel.length() < 0.5) S.dashVel = V3.Zero(); }
         if (move.lengthSquared() > 0) tryMove(move);
-        player.position.y = S.groundY;
-        if (mx || mz) { player.metadata.bob += dt * 9; player.position.y += Math.sin(player.metadata.bob) * 0.05; }
+        // stand on whatever surface is underfoot (ground OR the cracked platform)
+        const down = new BABYLON.Ray(new V3(player.position.x, player.position.y + 4, player.position.z), new V3(0, -1, 0), 16);
+        const gh = S.scene.pickWithRay(down, groundPick);
+        const surf = (gh && gh.hit) ? gh.pickedPoint.y : 0;
+        let targetY = surf + 1.7;
+        if (mx || mz) { player.metadata.bob += dt * 9; targetY += Math.sin(player.metadata.bob) * 0.06; }
+        player.position.y += (targetY - player.position.y) * Math.min(1, dt * 14);
+        S.groundY = surf + 1.7;
         player.rotation.y = S.yaw;
         const gun = player.getChildMeshes().find(m => m.name === 'gun'); if (gun) gun.rotation.x = -S.pitch * 0.5;
         const b = S.bounds; player.position.x = Math.max(-b, Math.min(b, player.position.x)); player.position.z = Math.max(-b, Math.min(b, player.position.z));
         updateCamera();
     }
+    function groundPick(m) { return m.name === 'ground' || colliders.indexOf(m) >= 0; }
     function tryMove(move) {
         const test = (axis) => {
             const np = player.position.clone(); if (axis === 'x') np.x += move.x; else if (axis === 'z') np.z += move.z; else { np.x += move.x; np.z += move.z; }
-            const pBox = new BABYLON.BoundingBox(new V3(np.x - 0.7, 0.5, np.z - 0.7), new V3(np.x + 0.7, 4.0, np.z + 0.7));
-            for (const c of colliders) { c.computeWorldMatrix(false); if (BABYLON.BoundingBox.Intersects(pBox, c.getBoundingInfo().boundingBox)) return false; }
+            // Box sits ABOVE the floor the player stands on (so the start platform / ground
+            // never blocks movement) but still catches walls, towers, trees and monoliths.
+            const pBox = new BABYLON.BoundingBox(new V3(np.x - 0.6, S.groundY + 0.4, np.z - 0.6), new V3(np.x + 0.6, S.groundY + 2.3, np.z + 0.6));
+            for (const c of colliders) {
+                c.computeWorldMatrix(false);
+                const cb = c.getBoundingInfo().boundingBox;
+                if (cb.maximumWorld.y <= S.groundY + 0.4) continue;     // low enough to stand on — ignore
+                if (BABYLON.BoundingBox.Intersects(pBox, cb)) return false;
+            }
             return true;
         };
         if (test('both')) { player.position.x += move.x; player.position.z += move.z; }
@@ -1075,12 +1263,15 @@ window.HELA = window.HELA || {};
             camera.setTarget(eye.add(aimVec(0)));
             return;
         }
-        const dist = 12, height = 5.2, cp = Math.cos(S.pitch);
-        const back = new V3(-Math.sin(S.yaw) * cp, Math.sin(S.pitch), -Math.cos(S.yaw) * cp);
-        const desired = player.position.add(back.scale(dist)).add(new V3(0, height, 0));
-        camera.position = V3.Lerp(camera.position, desired, 0.14);
+        // Third-person: sit behind/above the operative but LOOK ALONG the aim
+        // direction, so the screen-centre crosshair is the true line of fire.
+        const aim = aimVec(0);
+        const eye = player.position.add(new V3(0, 1.7, 0));
+        const desired = eye.subtract(aim.scale(7.5)).add(new V3(0, 2.4, 0));
+        if (desired.y < S.groundY + 1) desired.y = S.groundY + 1;
+        camera.position = V3.Lerp(camera.position, desired, 0.18);
         if (S.shake > 0.001) { camera.position.addInPlace(new V3((Math.random() - 0.5) * S.shake, (Math.random() - 0.5) * S.shake, (Math.random() - 0.5) * S.shake)); S.shake *= 0.86; }
-        camera.setTarget(player.position.add(new V3(0, 2.0, 0)));
+        camera.setTarget(eye.add(aim.scale(14)));
     }
     function updateEnemies(dt) {
         if (!S.running) return; const now = performance.now();
@@ -1088,18 +1279,23 @@ window.HELA = window.HELA || {};
             if (!e.metadata.alive) continue;
             const md = e.metadata;
             const isZombie = md.kind === 'zombie';
+            const stunned = md.stunUntil && now < md.stunUntil;   // EMP burst
+            const frozen = stunned || S.cloaked;                  // cloak = lose track of player
             const stopDist = md.kind === 'boss' ? 8 : (isZombie ? 1.9 : 2.6);
             const to = player.position.subtract(e.position); to.y = 0; const dist = to.length();
-            if (dist > stopDist) {
+            if (!frozen && dist > stopDist) {
                 to.normalize(); e.position.addInPlace(to.scale(md.speed * dt)); e.position.y = md.groundY - 0.5; e.rotation.y = Math.atan2(to.x, to.z);
                 if (md.legs) { md.walk += dt * (isZombie ? 6 : 9); md.legs[0].rotation.x = Math.sin(md.walk) * 0.55; md.legs[1].rotation.x = -Math.sin(md.walk) * 0.55; }
                 if (md.arms && isZombie) { const sway = Math.sin(md.walk * 0.5) * 0.12; md.arms[0].rotation.x = -1.2 + sway; md.arms[1].rotation.x = -1.2 - sway; }
+            } else if (stunned) {
+                e.rotation.z = Math.sin(now * 0.03) * 0.12;   // EMP twitch
             }
             // health bar follow
             const bp = e.position.add(new V3(0, md.headY, 0));
             md.barBg && md.barBg.position.copyFrom(bp); md.barFg && md.barFg.position.copyFrom(bp);
             if (md.barFg) md.barFg.scaling.x = Math.max(0, md.health / md.maxHealth);
-            // attack
+            // attack (suppressed while stunned or the player is cloaked)
+            if (frozen) continue;
             if (isZombie) {
                 if (dist <= stopDist + 0.6 && now - md.lastShot > md.fire) { md.lastShot = now; takeDamage(md.dmg + Math.random() * 4); if (HELA.Settings.get('shake')) addShake(0.12); }
             } else if (dist < (md.kind === 'boss' ? 60 : 42) && now - md.lastShot > md.fire) {
@@ -1148,9 +1344,9 @@ window.HELA = window.HELA || {};
         }
     }
     function applyPickup(type) {
-        if (type === 'ammo') { const a = curAmmo(); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + 24, 300); status('+24 AMMO', 900); }
-        else if (type === 'health') { S.health = Math.min(S.health + 35, 100); status('+35 INTEGRITY', 900); }
-        else if (type === 'shield') { S.shield = Math.min(S.shield + 40, 100); status('+40 SHIELD', 900); }
+        if (type === 'ammo') { const a = curAmmo(); const amt = Math.round(24 * (S.aug.ammoMult || 1)); if (a.reserve !== Infinity) a.reserve = Math.min(a.reserve + amt, 360); status('+' + amt + ' AMMO', 900); }
+        else if (type === 'health') { S.health = Math.min(S.health + 35, S.maxHealth); status('+35 INTEGRITY', 900); }
+        else if (type === 'shield') { S.shield = Math.min(S.shield + 40, S.maxShield); status('+40 SHIELD', 900); }
         updateHUD();
     }
     function updateDome(t) { if (domeMesh) { domeMesh.rotation.y = t * 0.1; if (domeMesh.metadata.core) domeMesh.metadata.core.rotation.y = -t * 0.15; } if (S.scene) S.scene.fogDensity = S.level.fogDensity + Math.sin(t * 0.4) * 0.0018; }
@@ -1178,8 +1374,8 @@ window.HELA = window.HELA || {};
 
     // ---- HUD ----
     function updateHUD() {
-        $('health-value').textContent = Math.floor(S.health); $('health-bar').style.width = S.health + '%';
-        $('shield-value').textContent = Math.floor(S.shield); $('shield-bar').style.width = S.shield + '%';
+        $('health-value').textContent = Math.floor(S.health); $('health-bar').style.width = (S.health / S.maxHealth * 100) + '%';
+        $('shield-value').textContent = Math.floor(S.shield); $('shield-bar').style.width = (S.shield / S.maxShield * 100) + '%';
         const w = curW(), a = curAmmo();
         $('weapon-name').textContent = w.name;
         const av = $('ammo-value'); av.textContent = S.codes.infammo ? '∞' : a.mag; av.classList.toggle('low', !S.codes.infammo && a.mag <= Math.ceil(w.mag * 0.25));
@@ -1230,6 +1426,7 @@ window.HELA = window.HELA || {};
             if (k === 'v') toggleView();
             if (k === 'h') useItem('medkit');
             if (k === 'g') useItem('grenade');
+            if (k === 'f') activateAbility();
             if (['1', '2', '3', '4'].includes(k)) { const id = HELA.WEAPON_ORDER[parseInt(k) - 1]; if (id) switchWeapon(id); }
             if (e.key === 'Escape') { if (S.running && !S.paused) HELA.Game.togglePause(); }
         });
@@ -1254,10 +1451,10 @@ window.HELA = window.HELA || {};
         if (!S.scene) return;
         const dt = Math.min(engine.getDeltaTime() / 1000, 0.05), t = performance.now() / 1000;
         if (S.running && !S.paused) {
-            updatePlayer(dt); updateViewmodel(dt); updateEnemies(dt); updateBolts(dt); updateGrenades(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt);
+            updatePlayer(dt); updateViewmodel(dt); updateEnemies(dt); updateBolts(dt); updateGrenades(dt); updateParticles(); updateDome(t); updateWind(t); updateMinimap(); updateInteractPrompt(); updateDirector(dt); updateAbility();
             if (S.mouseDown && curW().auto) shoot();
             if (S.frame % 6 === 0) updateHUD();
-            if (S.frame % 3 === 0) { const o = S.fpv ? camera.position : muzzle.getAbsolutePosition(); const ray = new BABYLON.Ray(o, aimVec(0), 140); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
+            if (S.frame % 3 === 0) { const ray = new BABYLON.Ray(camera.position, aimVec(0), 140); const h = S.scene.pickWithRay(ray, (m) => m.metadata && m.metadata.enemy && m.metadata.enemy.metadata.alive); $('crosshair').classList.toggle('hot', !!(h && h.hit)); }
             if (S.mapOpen && bigmapCtx && S.frame % 4 === 0) drawMapTo(bigmapCtx, 520, 520, true);
         }
         S.scene.render();
